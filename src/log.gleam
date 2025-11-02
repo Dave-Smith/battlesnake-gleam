@@ -1,5 +1,6 @@
 //// Structured Logging Module
 
+import gleam/erlang/system
 import gleam/float
 import gleam/int
 import gleam/io
@@ -103,4 +104,22 @@ fn float_to_string(f: Float) -> String {
       int.to_string(int_part) <> "." <> int.to_string(int.absolute_value(decimal_part))
     }
   }
+}
+
+pub fn get_monotonic_time() -> Int {
+  system.system_time(system.Millisecond)
+}
+
+pub fn log_timing(label: String, start_time: Int, end_time: Int) -> Nil {
+  let duration = end_time - start_time
+  debug_with_fields("Timing", [#("label", label), #("ms", int.to_string(duration))])
+}
+
+pub fn log_timing_with_depth(label: String, depth: Int, start_time: Int, end_time: Int) -> Nil {
+  let duration = end_time - start_time
+  debug_with_fields("Timing", [
+    #("label", label),
+    #("depth", int.to_string(depth)),
+    #("ms", int.to_string(duration)),
+  ])
 }

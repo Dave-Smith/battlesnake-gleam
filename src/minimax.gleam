@@ -7,6 +7,7 @@ import gleam/list
 import gleam/order
 import heuristic_config.{type HeuristicConfig}
 import heuristics
+import log
 
 pub type MinimaxResult {
   MinimaxResult(move: String, score: Float)
@@ -18,17 +19,21 @@ pub fn choose_move(
   depth: Int,
   config: HeuristicConfig,
 ) -> MinimaxResult {
+  let start_time = log.get_monotonic_time()
   let safe_moves = get_safe_moves(state)
 
-  case safe_moves {
+  let result = case safe_moves {
     [] -> MinimaxResult(move: "up", score: -999_999.0)
     [single] -> MinimaxResult(move: single, score: 0.0)
     moves -> {
       let move_scores =
         list.map(moves, fn(move) {
+          let move_start = log.get_monotonic_time()
           let next_state = simulate_game_state(state, move)
           let score =
             minimax(next_state, depth - 1, False, -999_999.0, 999_999.0, config)
+          let move_end = log.get_monotonic_time()
+          log.log_timing("minimax_branch_" <> move, move_start, move_end)
           #(move, score)
         })
 
@@ -45,6 +50,10 @@ pub fn choose_move(
       }
     }
   }
+
+  let end_time = log.get_monotonic_time()
+  log.log_timing_with_depth("minimax_total", depth, start_time, end_time)
+  result
 }
 
 /// Core recursive Minimax function with alpha-beta pruning

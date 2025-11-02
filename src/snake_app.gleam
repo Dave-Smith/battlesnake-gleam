@@ -46,9 +46,7 @@ fn calculate_dynamic_depth(game_state: GameState) -> Int {
   let num_snakes = list.length(game_state.board.snakes)
   let board_size = game_state.board.width * game_state.board.height
   let num_occupied =
-    list.fold(game_state.board.snakes, 0, fn(acc, snake) {
-      acc + snake.length
-    })
+    list.fold(game_state.board.snakes, 0, fn(acc, snake) { acc + snake.length })
   let board_density = num_occupied * 100 / board_size
 
   case num_snakes {
@@ -95,6 +93,7 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
     Post, "/move" -> {
       case parse_game_state(req) {
         Ok(game_state) -> {
+          let request_start = log.get_monotonic_time()
           let config = heuristic_config.default_config()
           let safe_moves = get_safe_moves(game_state)
 
@@ -122,6 +121,9 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
             detailed_scores,
             heuristics.evaluate_board(game_state, config),
           )
+
+          let request_end = log.get_monotonic_time()
+          log.log_timing("total_move_request", request_start, request_end)
 
           let move_response =
             api.MoveResponse(move: my_move, shout: Some("Gleam snake!"))
