@@ -9,11 +9,13 @@ import gleam/erlang/process
 import gleam/http.{Get, Post}
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
-import gleam/io
 import gleam/json
 import gleam/list
 import gleam/option.{Some}
-import gleam/string
+import heuristic_config
+import heuristics
+import log
+import minimax
 import mist
 
 fn json_response(body: String) -> Response(mist.ResponseData) {
@@ -58,11 +60,13 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
     Post, "/start" -> {
       case parse_game_state(req) {
         Ok(game_state) -> {
-          io.println("Game started: " <> game_state.game.id)
+          log.info_with_fields("Game started", [
+            #("game_id", game_state.game.id),
+          ])
           empty_response()
         }
         Error(_) -> {
-          io.println("Failed to parse /start request body")
+          log.error("Failed to parse /start request body")
           empty_response()
         }
       }
@@ -71,38 +75,39 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
     Post, "/move" -> {
       case parse_game_state(req) {
         Ok(game_state) -> {
-          let name = game_state.you.name
-          io.println(
-            "Snake: "
-            <> name
-            <> " Move request for turn "
-            <> string.inspect(game_state.turn),
-          )
+          let config = heuristic_config.default_config()
           let safe_moves = get_safe_moves(game_state)
-          let my_move = case safe_moves {
+
+          let #(my_move, score) = case safe_moves {
             [] -> {
-              io.println("No safe moves available! Choosing random move.")
+              log.warning("No safe moves available! Choosing random move.")
               case list.shuffle(["up", "down", "left", "right"]) {
-                [m, ..] -> m
-                [] -> "up"
+                [m, ..] -> #(m, -999_999.0)
+                [] -> #("up", -999_999.0)
               }
             }
-            moves -> {
-              case list.shuffle(moves) {
-                [m, ..] -> m
-                [] -> "up"
-              }
+            _ -> {
+              let result = minimax.choose_move(game_state, 7, config)
+              #(result.move, result.score)
             }
           }
+
+          log.log_move_decision(game_state.turn, my_move, score, safe_moves)
+
+          let detailed_scores =
+            heuristics.evaluate_board_detailed(game_state, config)
+          log.log_heuristic_scores(
+            my_move,
+            detailed_scores,
+            heuristics.evaluate_board(game_state, config),
+          )
+
           let move_response =
             api.MoveResponse(move: my_move, shout: Some("Gleam snake!"))
-          io.println("Snake: " <> name <> " Chosen move: " <> my_move)
           json_response(json.to_string(move_response_to_json(move_response)))
         }
         Error(_) -> {
-          io.println(
-            "Failed to parse /move request body, returning fallback move",
-          )
+          log.error("Failed to parse /move request body")
           let fallback_response =
             api.MoveResponse(move: "up", shout: Some("Error!"))
           json_response(
@@ -115,11 +120,13 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
     Post, "/end" -> {
       case parse_game_state(req) {
         Ok(game_state) -> {
-          io.println("Game ended: " <> game_state.game.id)
+          log.info_with_fields("Game ended", [
+            #("game_id", game_state.game.id),
+          ])
           empty_response()
         }
         Error(_) -> {
-          io.println("Failed to parse /end request body")
+          log.error("Failed to parse /end request body")
           empty_response()
         }
       }
@@ -138,6 +145,6 @@ pub fn main() {
     |> mist.port(8080)
     |> mist.start
 
-  io.println("Battlesnake server started on port 8080")
+  log.info("Battlesnake server started on port 8080")
   process.sleep_forever()
 }

@@ -1,0 +1,74 @@
+//// Heuristic Configuration Module
+
+pub type HeuristicConfig {
+  HeuristicConfig(
+    enable_safety_boundary: Bool,
+    enable_safety_self_collision: Bool,
+    enable_safety_head_collision: Bool,
+    enable_flood_fill: Bool,
+    enable_avoid_adjacent_heads: Bool,
+    enable_center_control: Bool,
+    enable_food_health: Bool,
+    enable_food_safety: Bool,
+    weight_safety_boundary: Float,
+    weight_safety_self_collision: Float,
+    weight_safety_head_collision_longer: Float,
+    weight_safety_head_collision_shorter: Float,
+    weight_flood_fill: Float,
+    weight_avoid_adjacent_heads: Float,
+    weight_avoid_adjacent_heads_longer: Float,
+    weight_center_control: Float,
+    weight_center_penalty: Float,
+    weight_food_health: Float,
+    weight_food_safety_penalty: Float,
+    health_threshold: Int,
+    early_game_turn_threshold: Int,
+  )
+}
+
+/// Default configuration matching the game plan specifications
+pub fn default_config() -> HeuristicConfig {
+  HeuristicConfig(
+    enable_safety_boundary: True,
+    enable_safety_self_collision: True,
+    enable_safety_head_collision: True,
+    enable_flood_fill: True,
+    enable_avoid_adjacent_heads: True,
+    enable_center_control: True,
+    enable_food_health: True,
+    enable_food_safety: True,
+    weight_safety_boundary: -1000.0,
+    weight_safety_self_collision: -1000.0,
+    weight_safety_head_collision_longer: -800.0,
+    weight_safety_head_collision_shorter: 50.0,
+    weight_flood_fill: 1.0,
+    weight_avoid_adjacent_heads: -150.0,
+    weight_avoid_adjacent_heads_longer: 20.0,
+    weight_center_control: 100.0,
+    weight_center_penalty: -20.0,
+    weight_food_health: 300.0,
+    weight_food_safety_penalty: -50.0,
+    health_threshold: 35,
+    early_game_turn_threshold: 50,
+  )
+}
+
+/// Aggressive configuration that favors space control and aggression
+pub fn aggressive_config() -> HeuristicConfig {
+  HeuristicConfig(
+    ..default_config(),
+    weight_flood_fill: 1.5,
+    weight_avoid_adjacent_heads_longer: 50.0,
+    weight_center_control: 150.0,
+  )
+}
+
+/// Defensive configuration that prioritizes safety
+pub fn defensive_config() -> HeuristicConfig {
+  HeuristicConfig(
+    ..default_config(),
+    weight_flood_fill: 2.0,
+    weight_avoid_adjacent_heads: -200.0,
+    weight_food_health: 400.0,
+  )
+}

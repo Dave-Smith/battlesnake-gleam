@@ -1,7 +1,13 @@
 //// Game State Utility Functions
 
 import api.{type Board, type Coord, type GameState, type Snake}
+import gleam/int
 import gleam/list
+
+/// Calculates the Manhattan distance between two coordinates.
+pub fn manhattan_distance(a: Coord, b: Coord) -> Int {
+  int.absolute_value(a.x - b.x) + int.absolute_value(a.y - b.y)
+}
 
 /// Checks if a coordinate is within the bounds of the game board.
 pub fn is_within_bounds(coord: Coord, board: Board) -> Bool {
@@ -82,6 +88,62 @@ pub fn get_safe_moves(game_state: GameState) -> List(String) {
       False -> acc
     }
   })
+}
+
+/// Chooses the best move from a list of safe moves by finding the move that gets closest to the nearest food.
+pub fn choose_best_move(
+  game_state: GameState,
+  safe_moves: List(String),
+) -> String {
+  let head = game_state.you.head
+  let food = game_state.board.food
+
+  case food {
+    [] -> case safe_moves {
+      [first, ..] -> first
+      [] -> "up"
+    }
+    _ -> {
+      let nearest_food = case
+        list.sort(food, fn(a, b) {
+          int.compare(manhattan_distance(head, a), manhattan_distance(head, b))
+        })
+      {
+        [nearest, ..] -> nearest
+        [] -> head
+      }
+
+      let move_coords = [
+        #("up", api.Coord(head.x, head.y + 1)),
+        #("down", api.Coord(head.x, head.y - 1)),
+        #("left", api.Coord(head.x - 1, head.y)),
+        #("right", api.Coord(head.x + 1, head.y)),
+      ]
+
+      let safe_move_coords =
+        list.filter(move_coords, fn(pair) {
+          let #(name, _) = pair
+          list.contains(safe_moves, name)
+        })
+
+      case
+        list.sort(safe_move_coords, fn(a, b) {
+          let #(_, coord_a) = a
+          let #(_, coord_b) = b
+          int.compare(
+            manhattan_distance(coord_a, nearest_food),
+            manhattan_distance(coord_b, nearest_food),
+          )
+        })
+      {
+        [#(best_move, _), ..] -> best_move
+        [] -> case safe_moves {
+          [first, ..] -> first
+          [] -> "up"
+        }
+      }
+    }
+  }
 }
 
 /// Simulates a single move for a snake and returns the new snake state.

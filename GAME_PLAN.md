@@ -10,10 +10,10 @@ Our primary goal is to develop a sophisticated Battlesnake AI that leverages Gle
 
 The Battlesnake AI will follow a modular architecture, making it easy to understand, test, and modify.
 
--   **`main.gleam`**: Entry point for the application, handling HTTP requests and delegating to the AI logic.
+-   **`snake_app.gleam`**: Entry point for the application, handling HTTP requests and delegating to the AI logic.
 -   **`api.gleam`**: Defines the types for incoming Battlesnake API requests and outgoing responses. Handles JSON encoding/decoding.
--   **`game_state.gleam`**: Contains data structures for representing the game board, snakes, food, and the overall game state. Includes utility functions for manipulating the game state (e.g., `move_snake`, `is_coord_safe`).
--   **`minimax.gleam`**: Implements the Minimax algorithm with alpha-beta pruning. This module will be responsible for recursively evaluating game states.
+-   **`game_state.gleam`**: Contains data structures and functions representing heuristics and algorithsm for game play. Includes utility functions for manipulating the game state (e.g., `move_snake`, `is_coord_safe`).
+-   **`minimax.gleam`**: Implements the Minimax algorithm with alpha-beta pruning. This module will be responsible for recursively evaluating game states. Does not exist yet.
     -   `minimax(game_state, depth, is_maximizing_player, alpha, beta)`: The core recursive function.
     -   `choose_move(game_state, depth)`: The public interface for selecting the best move.
 -   **`heuristics.gleam`**: Contains individual heuristic functions, each responsible for calculating a specific score component for a given game state.
