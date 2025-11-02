@@ -103,3 +103,46 @@ fn bfs_helper(
     }
   }
 }
+
+/// Computes Voronoi territory for a starting position against opponents.
+/// Returns the count of tiles this position can reach before any opponent.
+pub fn voronoi_territory(
+  start: Coord,
+  opponent_heads: List(Coord),
+  board: Board,
+  snakes: List(Snake),
+) -> Int {
+  let all_tiles = get_all_empty_tiles(board, snakes)
+
+  list.fold(all_tiles, 0, fn(acc, tile) {
+    let our_distance = bfs_distance(start, tile, board, snakes)
+
+    case our_distance {
+      -1 -> acc
+      our_dist -> {
+        let opponent_can_reach_faster =
+          list.any(opponent_heads, fn(opp_head) {
+            let opp_distance = bfs_distance(opp_head, tile, board, snakes)
+            case opp_distance {
+              -1 -> False
+              opp_dist -> opp_dist <= our_dist
+            }
+          })
+
+        case opponent_can_reach_faster {
+          True -> acc
+          False -> acc + 1
+        }
+      }
+    }
+  })
+}
+
+fn get_all_empty_tiles(board: Board, snakes: List(Snake)) -> List(Coord) {
+  let all_coords =
+    list.flat_map(list.range(0, board.width - 1), fn(x) {
+      list.map(list.range(0, board.height - 1), fn(y) { api.Coord(x, y) })
+    })
+
+  list.filter(all_coords, fn(coord) { is_valid_tile(coord, board, snakes) })
+}

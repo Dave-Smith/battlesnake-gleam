@@ -42,6 +42,14 @@ pub fn evaluate_board(state: GameState, config: HeuristicConfig) -> Float {
       True -> tail_chasing_score(state, config)
       False -> 0.0
     }),
+    #("food_safety", case config.enable_food_safety {
+      True -> food_safety_score(state, config)
+      False -> 0.0
+    }),
+    #("voronoi_control", case config.enable_voronoi_control {
+      True -> voronoi_control_score(state, config)
+      False -> 0.0
+    }),
   ]
 
   list.fold(scores, 0.0, fn(acc, pair) {
@@ -86,6 +94,14 @@ pub fn evaluate_board_detailed(
     }),
     #("tail_chasing", case config.enable_tail_chasing {
       True -> tail_chasing_score(state, config)
+      False -> 0.0
+    }),
+    #("food_safety", case config.enable_food_safety {
+      True -> food_safety_score(state, config)
+      False -> 0.0
+    }),
+    #("voronoi_control", case config.enable_voronoi_control {
+      True -> voronoi_control_score(state, config)
       False -> 0.0
     }),
   ]
@@ -261,5 +277,93 @@ fn tail_chasing_score(state: GameState, config: HeuristicConfig) -> Float {
       config.weight_tail_chasing *. distance_factor
     }
     False -> 0.0
+  }
+}
+
+/// F. Food Safety - evaluate safety of food positions before moving towards them
+fn food_safety_score(state: GameState, config: HeuristicConfig) -> Float {
+  let our_head = state.you.head
+  let our_health = state.you.health
+  let food = state.board.food
+
+  case our_health < config.health_threshold && food != [] {
+    True -> {
+      let current_space =
+        pathfinding.flood_fill(our_head, state.board, state.board.snakes)
+
+      let food_with_space =
+        list.map(food, fn(food_coord) {
+          let distance = manhattan_distance(our_head, food_coord)
+          let space_after =
+            pathfinding.flood_fill(food_coord, state.board, state.board.snakes)
+          #(food_coord, distance, space_after)
+        })
+
+      let nearest_safe_food = case
+        list.sort(food_with_space, fn(a, b) {
+          let #(_, dist_a, space_a) = a
+          let #(_, dist_b, space_b) = b
+          case int.compare(dist_a, dist_b) {
+            order.Eq -> int.compare(space_b, space_a)
+            other -> other
+          }
+        })
+      {
+        [#(_, _, space_after), ..] -> space_after
+        [] -> current_space
+      }
+
+      case nearest_safe_food < current_space - 10 {
+        True -> config.weight_food_safety_penalty
+        False -> 0.0
+      }
+    }
+    False -> 0.0
+  }
+}
+
+/// G. Voronoi Space Control - maximize territory we can reach before opponents
+fn voronoi_control_score(state: GameState, config: HeuristicConfig) -> Float {
+  let our_id = state.you.id
+  let our_head = state.you.head
+  let opponent_snakes =
+    list.filter(state.board.snakes, fn(s) { s.id != our_id })
+
+  case opponent_snakes {
+    [] -> 0.0
+    opponents -> {
+      let our_controlled =
+        pathfinding.voronoi_territory(
+          our_head,
+          list.map(opponents, fn(s) { s.head }),
+          state.board,
+          state.board.snakes,
+        )
+
+      let total_controlled =
+        list.fold(opponents, our_controlled, fn(acc, opponent) {
+          acc
+          + pathfinding.voronoi_territory(
+            opponent.head,
+            list.append([our_head], list.filter_map(opponents, fn(s) {
+              case s.id == opponent.id {
+                True -> Error(Nil)
+                False -> Ok(s.head)
+              }
+            })),
+            state.board,
+            state.board.snakes,
+          )
+        })
+
+      case total_controlled > 0 {
+        True -> {
+          let control_ratio =
+            int.to_float(our_controlled) /. int.to_float(total_controlled)
+          config.weight_voronoi_control *. control_ratio
+        }
+        False -> 0.0
+      }
+    }
   }
 }

@@ -18,6 +18,8 @@ Key strategic elements include:
   - Depth 5 for crowded boards (>40% density)
   - Depth 7 for normal play (default)
 - **Tail Chasing:** Following our own tail when healthy (health >50) and space is limited (<30 accessible tiles) to create escape routes and prevent being boxed in.
+- **Food Safety Evaluation:** Before pursuing food, evaluates the safety of eating it by checking if the resulting position would trap us (flood fill drops significantly).
+- **Voronoi Space Control:** Calculates territorial control by determining which tiles we can reach before opponents, maximizing our controlled space especially in 1v1 endgames.
 
 ## Tech Stack
 
