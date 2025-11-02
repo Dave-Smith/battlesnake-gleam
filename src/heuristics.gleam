@@ -38,6 +38,10 @@ pub fn evaluate_board(state: GameState, config: HeuristicConfig) -> Float {
       True -> food_health_score(state, config)
       False -> 0.0
     }),
+    #("tail_chasing", case config.enable_tail_chasing {
+      True -> tail_chasing_score(state, config)
+      False -> 0.0
+    }),
   ]
 
   list.fold(scores, 0.0, fn(acc, pair) {
@@ -78,6 +82,10 @@ pub fn evaluate_board_detailed(
     }),
     #("food_health", case config.enable_food_health {
       True -> food_health_score(state, config)
+      False -> 0.0
+    }),
+    #("tail_chasing", case config.enable_tail_chasing {
+      True -> tail_chasing_score(state, config)
       False -> 0.0
     }),
   ]
@@ -226,6 +234,31 @@ fn food_health_score(state: GameState, config: HeuristicConfig) -> Float {
       let distance_factor =
         1.0 /. { int.to_float(nearest_food_distance) +. 1.0 }
       config.weight_food_health *. distance_factor
+    }
+    False -> 0.0
+  }
+}
+
+/// E. Tail Chasing - follow our tail when healthy and space is limited
+fn tail_chasing_score(state: GameState, config: HeuristicConfig) -> Float {
+  let our_health = state.you.health
+  let our_head = state.you.head
+  let our_tail = case list.reverse(state.you.body) {
+    [tail, ..] -> tail
+    [] -> our_head
+  }
+
+  let accessible_tiles =
+    pathfinding.flood_fill(our_head, state.board, state.board.snakes)
+
+  case
+    our_health > config.tail_chasing_health_threshold
+    && accessible_tiles < config.tail_chasing_space_threshold
+  {
+    True -> {
+      let tail_distance = manhattan_distance(our_head, our_tail)
+      let distance_factor = 1.0 /. { int.to_float(tail_distance) +. 1.0 }
+      config.weight_tail_chasing *. distance_factor
     }
     False -> 0.0
   }

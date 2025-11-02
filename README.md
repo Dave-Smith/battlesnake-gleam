@@ -12,6 +12,12 @@ Key strategic elements include:
 - **Aggression/Defense:** Smartly engaging or avoiding opponents based on length and board position.
 - **Food Management:** Eating only when necessary and evaluating the safety of food locations.
 - **Board Positioning:** Attempting to control the center of the board, especially in the early game.
+- **Dynamic Depth Adjustment:** Intelligently adjusting Minimax search depth based on game state:
+  - Depth 10 for solo survival (1 snake remaining)
+  - Depth 9 for endgame battles (2 snakes)
+  - Depth 5 for crowded boards (>40% density)
+  - Depth 7 for normal play (default)
+- **Tail Chasing:** Following our own tail when healthy (health >50) and space is limited (<30 accessible tiles) to create escape routes and prevent being boxed in.
 
 ## Tech Stack
 

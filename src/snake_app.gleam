@@ -42,6 +42,26 @@ fn parse_game_state(
   }
 }
 
+fn calculate_dynamic_depth(game_state: GameState) -> Int {
+  let num_snakes = list.length(game_state.board.snakes)
+  let board_size = game_state.board.width * game_state.board.height
+  let num_occupied =
+    list.fold(game_state.board.snakes, 0, fn(acc, snake) {
+      acc + snake.length
+    })
+  let board_density = num_occupied * 100 / board_size
+
+  case num_snakes {
+    1 -> 10
+    2 -> 9
+    _ ->
+      case board_density > 40 {
+        True -> 5
+        False -> 7
+      }
+  }
+}
+
 fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) {
   case req.method, req.path {
     Get, "/" -> {
@@ -87,7 +107,8 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
               }
             }
             _ -> {
-              let result = minimax.choose_move(game_state, 7, config)
+              let depth = calculate_dynamic_depth(game_state)
+              let result = minimax.choose_move(game_state, depth, config)
               #(result.move, result.score)
             }
           }
