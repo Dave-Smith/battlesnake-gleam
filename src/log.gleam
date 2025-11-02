@@ -1,6 +1,5 @@
 //// Structured Logging Module
 
-import gleam/erlang/system
 import gleam/float
 import gleam/int
 import gleam/io
@@ -106,8 +105,15 @@ fn float_to_string(f: Float) -> String {
   }
 }
 
+@external(erlang, "erlang", "monotonic_time")
+fn erlang_monotonic_time(unit: TimeUnit) -> Int
+
+pub type TimeUnit {
+  Millisecond
+}
+
 pub fn get_monotonic_time() -> Int {
-  system.system_time(system.Millisecond)
+  erlang_monotonic_time(Millisecond)
 }
 
 pub fn log_timing(label: String, start_time: Int, end_time: Int) -> Nil {
