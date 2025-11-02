@@ -5,6 +5,7 @@ import api.{
 import game_state.{get_safe_moves}
 import gleam/bit_array
 import gleam/bytes_tree
+import gleam/erlang/process
 import gleam/http.{Get, Post}
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
@@ -70,7 +71,13 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
     Post, "/move" -> {
       case parse_game_state(req) {
         Ok(game_state) -> {
-          io.println("Move request for turn " <> string.inspect(game_state.turn))
+          let name = game_state.you.name
+          io.println(
+            "Snake: "
+            <> name
+            <> " Move request for turn "
+            <> string.inspect(game_state.turn),
+          )
           let safe_moves = get_safe_moves(game_state)
           let my_move = case safe_moves {
             [] -> {
@@ -89,6 +96,7 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
           }
           let move_response =
             api.MoveResponse(move: my_move, shout: Some("Gleam snake!"))
+          io.println("Snake: " <> name <> " Chosen move: " <> my_move)
           json_response(json.to_string(move_response_to_json(move_response)))
         }
         Error(_) -> {
@@ -129,5 +137,7 @@ pub fn main() {
     mist.new(handle_request)
     |> mist.port(8080)
     |> mist.start
+
   io.println("Battlesnake server started on port 8080")
+  process.sleep_forever()
 }
