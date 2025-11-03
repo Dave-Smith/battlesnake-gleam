@@ -3,8 +3,10 @@
 import api.{type GameState}
 import game_state.{get_safe_moves, simulate_game_state}
 import gleam/float
+import gleam/int
 import gleam/list
 import gleam/order
+import gleam/string
 import heuristic_config.{type HeuristicConfig}
 import heuristics
 import log
@@ -33,15 +35,25 @@ pub fn choose_move(
           let score =
             minimax(next_state, depth - 1, False, -999_999.0, 999_999.0, config)
           let move_end = log.get_monotonic_time()
-          log.log_timing("minimax_branch_" <> move, move_start, move_end)
+          let _ =
+            log.log_timing("minimax_branch_" <> move, move_start, move_end)
           #(move, score)
         })
 
+      let tie_breaker = calculate_tie_breaker(state.you.id, state.turn)
+
       case
         list.sort(move_scores, fn(a, b) {
-          let #(_, score_a) = a
-          let #(_, score_b) = b
-          float.compare(score_b, with: score_a)
+          let #(move_a, score_a) = a
+          let #(move_b, score_b) = b
+          case float.compare(score_b, with: score_a) {
+            order.Eq -> {
+              let bias_a = get_move_bias(move_a, tie_breaker)
+              let bias_b = get_move_bias(move_b, tie_breaker)
+              float.compare(bias_b, bias_a)
+            }
+            other -> other
+          }
         })
       {
         [#(best_move, best_score), ..] ->
@@ -52,8 +64,59 @@ pub fn choose_move(
   }
 
   let end_time = log.get_monotonic_time()
-  log.log_timing_with_depth("minimax_total", depth, start_time, end_time)
+  let _ =
+    log.log_timing_with_depth("minimax_total", depth, start_time, end_time)
   result
+}
+
+fn calculate_tie_breaker(snake_id: String, turn: Int) -> Int {
+  let id_hash = string_hash(snake_id)
+  { id_hash + turn * 7 } % 100
+}
+
+fn string_hash(s: String) -> Int {
+  string.to_graphemes(s)
+  |> list.fold(0, fn(acc, char) {
+    let char_val = case string.pop_grapheme(char) {
+      Ok(#(c, _)) ->
+        case c {
+          "a" | "A" -> 1
+          "b" | "B" -> 2
+          "c" | "C" -> 3
+          "d" | "D" -> 4
+          "e" | "E" -> 5
+          "f" | "F" -> 6
+          "g" | "G" -> 7
+          "h" | "H" -> 8
+          "i" | "I" -> 9
+          "0" -> 10
+          "1" -> 11
+          "2" -> 12
+          "3" -> 13
+          "4" -> 14
+          "5" -> 15
+          "6" -> 16
+          "7" -> 17
+          "8" -> 18
+          "9" -> 19
+          "-" -> 20
+          _ -> 0
+        }
+      Error(_) -> 0
+    }
+    acc * 31 + char_val
+  })
+}
+
+fn get_move_bias(move: String, tie_breaker: Int) -> Float {
+  let base = case move {
+    "up" -> 0.1
+    "down" -> 0.2
+    "left" -> 0.3
+    "right" -> 0.4
+    _ -> 0.0
+  }
+  base +. int.to_float(tie_breaker) /. 1000.0
 }
 
 /// Core recursive Minimax function with alpha-beta pruning
