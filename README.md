@@ -25,6 +25,11 @@ Key strategic elements include:
   - O(sample_size × N) complexity for sub-5ms performance
   - Maximizes controlled space especially in 1v1 endgames
   - 5000x+ faster than naive implementation to stay within 500ms response timeout
+- **Deterministic Tie-Breaking:** Prevents identical snakes from always drawing:
+  - Hashes snake ID to create unique but consistent per-snake preferences
+  - Adds turn-based variation to break repetitive patterns
+  - Tiny bias (0.001-0.1) only affects moves with equal scores
+  - Ensures different snakes make different choices in symmetric positions
 
 ## Tech Stack
 
