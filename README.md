@@ -31,6 +31,13 @@ Key strategic elements include:
   - Tiny bias (0.001-0.1) only affects moves with equal scores
   - Ensures different snakes make different choices in symmetric positions
 
+## Performance Optimization
+
+To maintain sub-500ms response times:
+- **Minimal Logging:** Only summary logs per move (not per node evaluation)
+- **Non-blocking IO:** Logging uses INFO level only, avoiding thousands of blocking writes
+- **Optimized Algorithms:** Manhattan distance, strategic sampling, and alpha-beta pruning
+
 ## Tech Stack
 
 - **Language:** Gleam

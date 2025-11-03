@@ -123,7 +123,10 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
           )
 
           let request_end = log.get_monotonic_time()
-          log.log_timing("total_move_request", request_start, request_end)
+          log.info_with_fields("Move request complete", [
+            #("turn", int.to_string(game_state.turn)),
+            #("duration_ms", int.to_string(request_end - request_start)),
+          ])
 
           let move_response =
             api.MoveResponse(move: my_move, shout: Some("Gleam snake!"))

@@ -30,13 +30,9 @@ pub fn choose_move(
     moves -> {
       let move_scores =
         list.map(moves, fn(move) {
-          let move_start = log.get_monotonic_time()
           let next_state = simulate_game_state(state, move)
           let score =
             minimax(next_state, depth - 1, False, -999_999.0, 999_999.0, config)
-          let move_end = log.get_monotonic_time()
-          let _ =
-            log.log_timing("minimax_branch_" <> move, move_start, move_end)
           #(move, score)
         })
 
@@ -64,8 +60,11 @@ pub fn choose_move(
   }
 
   let end_time = log.get_monotonic_time()
-  let _ =
-    log.log_timing_with_depth("minimax_total", depth, start_time, end_time)
+  log.info_with_fields("Minimax complete", [
+    #("depth", int.to_string(depth)),
+    #("duration_ms", int.to_string(end_time - start_time)),
+    #("moves_evaluated", int.to_string(list.length(safe_moves))),
+  ])
   result
 }
 

@@ -159,12 +159,9 @@ fn safety_head_collision_score(
 
 /// B. Flood Fill - count accessible tiles from current head position
 fn flood_fill_score(state: GameState, config: HeuristicConfig) -> Float {
-  let start_time = log.get_monotonic_time()
   let head = state.you.head
   let accessible_tiles =
     pathfinding.flood_fill(head, state.board, state.board.snakes)
-  let end_time = log.get_monotonic_time()
-  log.log_timing("flood_fill", start_time, end_time)
   int.to_float(accessible_tiles) *. config.weight_flood_fill
 }
 
@@ -330,13 +327,12 @@ fn food_safety_score(state: GameState, config: HeuristicConfig) -> Float {
 /// G. Voronoi Space Control - maximize territory we can reach before opponents
 /// Optimized version using Manhattan distance and strategic tile sampling
 fn voronoi_control_score(state: GameState, config: HeuristicConfig) -> Float {
-  let start_time = log.get_monotonic_time()
   let our_id = state.you.id
   let our_head = state.you.head
   let opponent_snakes =
     list.filter(state.board.snakes, fn(s) { s.id != our_id })
 
-  let result = case opponent_snakes {
+  case opponent_snakes {
     [] -> 0.0
     opponents -> {
       let opponent_heads = list.map(opponents, fn(s) { s.head })
@@ -353,8 +349,4 @@ fn voronoi_control_score(state: GameState, config: HeuristicConfig) -> Float {
       config.weight_voronoi_control *. control_score
     }
   }
-
-  let end_time = log.get_monotonic_time()
-  log.log_timing("voronoi_control", start_time, end_time)
-  result
 }
