@@ -104,45 +104,83 @@ fn bfs_helper(
   }
 }
 
-/// Computes Voronoi territory for a starting position against opponents.
-/// Returns the count of tiles this position can reach before any opponent.
-pub fn voronoi_territory(
+/// Optimized Voronoi-like territory calculation using Manhattan distance.
+/// Samples strategic tiles instead of checking every tile on the board.
+/// Returns the count of sampled tiles we can reach before any opponent.
+/// Complexity: O(sample_size × N) instead of O(W² × H² × N)
+pub fn voronoi_territory_fast(
   start: Coord,
   opponent_heads: List(Coord),
   board: Board,
-  snakes: List(Snake),
 ) -> Int {
-  let all_tiles = get_all_empty_tiles(board, snakes)
+  let sample_tiles = get_strategic_sample_tiles(board)
 
-  list.fold(all_tiles, 0, fn(acc, tile) {
-    let our_distance = bfs_distance(start, tile, board, snakes)
+  list.fold(sample_tiles, 0, fn(acc, tile) {
+    let our_distance = manhattan_distance(start, tile)
+    
+    let we_are_closest = list.all(opponent_heads, fn(opp_head) {
+      manhattan_distance(opp_head, tile) > our_distance
+    })
 
-    case our_distance {
-      -1 -> acc
-      our_dist -> {
-        let opponent_can_reach_faster =
-          list.any(opponent_heads, fn(opp_head) {
-            let opp_distance = bfs_distance(opp_head, tile, board, snakes)
-            case opp_distance {
-              -1 -> False
-              opp_dist -> opp_dist <= our_dist
-            }
-          })
-
-        case opponent_can_reach_faster {
-          True -> acc
-          False -> acc + 1
-        }
-      }
+    case we_are_closest {
+      True -> acc + 1
+      False -> acc
     }
   })
 }
 
-fn get_all_empty_tiles(board: Board, snakes: List(Snake)) -> List(Coord) {
-  let all_coords =
-    list.flat_map(list.range(0, board.width - 1), fn(x) {
-      list.map(list.range(0, board.height - 1), fn(y) { api.Coord(x, y) })
+/// Returns a strategic sample of tiles to check for territory control.
+/// Instead of checking all tiles (expensive), we sample:
+/// - Center region tiles
+/// - Grid pattern across board
+/// This gives ~20-30 tiles instead of 100-121 on standard boards.
+fn get_strategic_sample_tiles(board: Board) -> List(Coord) {
+  let center_x = board.width / 2
+  let center_y = board.height / 2
+  
+  let center_tiles = [
+    api.Coord(center_x, center_y),
+    api.Coord(center_x - 1, center_y),
+    api.Coord(center_x + 1, center_y),
+    api.Coord(center_x, center_y - 1),
+    api.Coord(center_x, center_y + 1),
+    api.Coord(center_x - 2, center_y),
+    api.Coord(center_x + 2, center_y),
+    api.Coord(center_x, center_y - 2),
+    api.Coord(center_x, center_y + 2),
+  ]
+
+  let grid_tiles =
+    list.flat_map(list.range(1, board.width - 2), fn(x) {
+      case x % 2 {
+        0 ->
+          list.filter_map(list.range(1, board.height - 2), fn(y) {
+            case y % 2 {
+              0 -> Ok(api.Coord(x, y))
+              _ -> Error(Nil)
+            }
+          })
+        _ -> []
+      }
     })
 
-  list.filter(all_coords, fn(coord) { is_valid_tile(coord, board, snakes) })
+  list.append(center_tiles, grid_tiles)
+  |> list.filter(fn(coord) {
+    coord.x >= 0
+    && coord.y >= 0
+    && coord.x < board.width
+    && coord.y < board.height
+  })
+}
+
+fn manhattan_distance(a: Coord, b: Coord) -> Int {
+  let dx = case a.x > b.x {
+    True -> a.x - b.x
+    False -> b.x - a.x
+  }
+  let dy = case a.y > b.y {
+    True -> a.y - b.y
+    False -> b.y - a.y
+  }
+  dx + dy
 }

@@ -328,6 +328,7 @@ fn food_safety_score(state: GameState, config: HeuristicConfig) -> Float {
 }
 
 /// G. Voronoi Space Control - maximize territory we can reach before opponents
+/// Optimized version using Manhattan distance and strategic tile sampling
 fn voronoi_control_score(state: GameState, config: HeuristicConfig) -> Float {
   let start_time = log.get_monotonic_time()
   let our_id = state.you.id
@@ -338,41 +339,18 @@ fn voronoi_control_score(state: GameState, config: HeuristicConfig) -> Float {
   let result = case opponent_snakes {
     [] -> 0.0
     opponents -> {
+      let opponent_heads = list.map(opponents, fn(s) { s.head })
+      
       let our_controlled =
-        pathfinding.voronoi_territory(
+        pathfinding.voronoi_territory_fast(
           our_head,
-          list.map(opponents, fn(s) { s.head }),
+          opponent_heads,
           state.board,
-          state.board.snakes,
         )
 
-      let total_controlled =
-        list.fold(opponents, our_controlled, fn(acc, opponent) {
-          acc
-          + pathfinding.voronoi_territory(
-            opponent.head,
-            list.append(
-              [our_head],
-              list.filter_map(opponents, fn(s) {
-                case s.id == opponent.id {
-                  True -> Error(Nil)
-                  False -> Ok(s.head)
-                }
-              }),
-            ),
-            state.board,
-            state.board.snakes,
-          )
-        })
-
-      case total_controlled > 0 {
-        True -> {
-          let control_ratio =
-            int.to_float(our_controlled) /. int.to_float(total_controlled)
-          config.weight_voronoi_control *. control_ratio
-        }
-        False -> 0.0
-      }
+      let sample_size = list.length(opponent_heads) * 15
+      let control_score = int.to_float(our_controlled) /. int.to_float(sample_size)
+      config.weight_voronoi_control *. control_score
     }
   }
 
