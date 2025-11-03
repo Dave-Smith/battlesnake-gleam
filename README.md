@@ -30,6 +30,11 @@ Key strategic elements include:
   - Adds turn-based variation to break repetitive patterns
   - Tiny bias (0.001-0.1) only affects moves with equal scores
   - Ensures different snakes make different choices in symmetric positions
+- **Competitive Length Strategy:** Actively maintains length advantage for head-to-head dominance:
+  - Seeks food when tied with or shorter than longest opponent (even with high health)
+  - Critical priority (250) when behind in length, moderate (150) when tied
+  - Only triggers when health >50 to avoid desperate situations
+  - Enables aggressive head-to-head plays when longer than opponents
 
 ## Performance Optimization
 

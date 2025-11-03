@@ -52,6 +52,10 @@ pub fn evaluate_board(state: GameState, config: HeuristicConfig) -> Float {
       True -> voronoi_control_score(state, config)
       False -> 0.0
     }),
+    #("competitive_length", case config.enable_competitive_length {
+      True -> competitive_length_score(state, config)
+      False -> 0.0
+    }),
   ]
 
   list.fold(scores, 0.0, fn(acc, pair) {
@@ -104,6 +108,10 @@ pub fn evaluate_board_detailed(
     }),
     #("voronoi_control", case config.enable_voronoi_control {
       True -> voronoi_control_score(state, config)
+      False -> 0.0
+    }),
+    #("competitive_length", case config.enable_competitive_length {
+      True -> competitive_length_score(state, config)
       False -> 0.0
     }),
   ]
@@ -347,6 +355,77 @@ fn voronoi_control_score(state: GameState, config: HeuristicConfig) -> Float {
       let sample_size = list.length(opponent_heads) * 15
       let control_score = int.to_float(our_controlled) /. int.to_float(sample_size)
       config.weight_voronoi_control *. control_score
+    }
+  }
+}
+
+/// H. Competitive Length - maintain length advantage for head-to-head dominance
+fn competitive_length_score(state: GameState, config: HeuristicConfig) -> Float {
+  let our_length = state.you.length
+  let our_health = state.you.health
+  let our_head = state.you.head
+  let food = state.board.food
+  let opponent_snakes =
+    list.filter(state.board.snakes, fn(s) { s.id != state.you.id })
+
+  case opponent_snakes {
+    [] -> 0.0
+    opponents -> {
+      let max_opponent_length =
+        list.fold(opponents, 0, fn(max_len, snake) {
+          case snake.length > max_len {
+            True -> snake.length
+            False -> max_len
+          }
+        })
+
+      let length_diff = our_length - max_opponent_length
+
+      case length_diff {
+        diff if diff >= 2 -> 0.0
+        diff if diff >= 0 -> {
+          case our_health > config.competitive_length_health_min && food != [] {
+            True -> {
+              let nearest_food_distance = case
+                list.sort(food, fn(a, b) {
+                  int.compare(
+                    manhattan_distance(our_head, a),
+                    manhattan_distance(our_head, b),
+                  )
+                })
+              {
+                [nearest, ..] -> manhattan_distance(our_head, nearest)
+                [] -> 999
+              }
+              let distance_factor =
+                1.0 /. { int.to_float(nearest_food_distance) +. 1.0 }
+              config.weight_competitive_length *. distance_factor
+            }
+            False -> 0.0
+          }
+        }
+        _ -> {
+          case our_health > config.competitive_length_health_min && food != [] {
+            True -> {
+              let nearest_food_distance = case
+                list.sort(food, fn(a, b) {
+                  int.compare(
+                    manhattan_distance(our_head, a),
+                    manhattan_distance(our_head, b),
+                  )
+                })
+              {
+                [nearest, ..] -> manhattan_distance(our_head, nearest)
+                [] -> 999
+              }
+              let distance_factor =
+                1.0 /. { int.to_float(nearest_food_distance) +. 1.0 }
+              config.weight_competitive_length_critical *. distance_factor
+            }
+            False -> 0.0
+          }
+        }
+      }
     }
   }
 }

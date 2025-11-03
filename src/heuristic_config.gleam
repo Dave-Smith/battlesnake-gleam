@@ -12,6 +12,7 @@ pub type HeuristicConfig {
     enable_food_safety: Bool,
     enable_tail_chasing: Bool,
     enable_voronoi_control: Bool,
+    enable_competitive_length: Bool,
     weight_safety_boundary: Float,
     weight_safety_self_collision: Float,
     weight_safety_head_collision_longer: Float,
@@ -25,10 +26,13 @@ pub type HeuristicConfig {
     weight_food_safety_penalty: Float,
     weight_tail_chasing: Float,
     weight_voronoi_control: Float,
+    weight_competitive_length: Float,
+    weight_competitive_length_critical: Float,
     health_threshold: Int,
     early_game_turn_threshold: Int,
     tail_chasing_health_threshold: Int,
     tail_chasing_space_threshold: Int,
+    competitive_length_health_min: Int,
   )
 }
 
@@ -45,6 +49,7 @@ pub fn default_config() -> HeuristicConfig {
     enable_food_safety: True,
     enable_tail_chasing: True,
     enable_voronoi_control: True,
+    enable_competitive_length: True,
     weight_safety_boundary: -1000.0,
     weight_safety_self_collision: -1000.0,
     weight_safety_head_collision_longer: -800.0,
@@ -58,10 +63,13 @@ pub fn default_config() -> HeuristicConfig {
     weight_food_safety_penalty: -50.0,
     weight_tail_chasing: 80.0,
     weight_voronoi_control: 15.0,
+    weight_competitive_length: 150.0,
+    weight_competitive_length_critical: 250.0,
     health_threshold: 35,
     early_game_turn_threshold: 50,
     tail_chasing_health_threshold: 50,
     tail_chasing_space_threshold: 30,
+    competitive_length_health_min: 50,
   )
 }
 
