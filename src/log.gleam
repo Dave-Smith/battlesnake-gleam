@@ -22,7 +22,11 @@ fn level_to_string(level: LogLevel) -> String {
   }
 }
 
-pub fn log(level: LogLevel, message: String, fields: List(#(String, String))) -> Nil {
+pub fn log(
+  level: LogLevel,
+  message: String,
+  fields: List(#(String, String)),
+) -> Nil {
   let level_str = level_to_string(level)
   let fields_str = case fields {
     [] -> ""
@@ -46,12 +50,17 @@ pub fn info_with_fields(message: String, fields: List(#(String, String))) -> Nil
   log(Info, message, fields)
 }
 
-pub fn debug(message: String) -> Nil {
-  log(Debug, message, [])
+pub fn debug(_message: String) -> Nil {
+  Nil
+  // log(Debug, message, [])
 }
 
-pub fn debug_with_fields(message: String, fields: List(#(String, String))) -> Nil {
-  log(Debug, message, fields)
+pub fn debug_with_fields(
+  _message: String,
+  _fields: List(#(String, String)),
+) -> Nil {
+  Nil
+  // log(Debug, message, fields)
 }
 
 pub fn warning(message: String) -> Nil {
@@ -99,8 +108,11 @@ fn float_to_string(f: Float) -> String {
   case int.to_float(rounded) == f {
     True -> int.to_string(int_part)
     False -> {
-      let decimal_part = float.truncate({ f -. int.to_float(int_part) } *. 100.0)
-      int.to_string(int_part) <> "." <> int.to_string(int.absolute_value(decimal_part))
+      let decimal_part =
+        float.truncate({ f -. int.to_float(int_part) } *. 100.0)
+      int.to_string(int_part)
+      <> "."
+      <> int.to_string(int.absolute_value(decimal_part))
     }
   }
 }
@@ -118,10 +130,18 @@ pub fn get_monotonic_time() -> Int {
 
 pub fn log_timing(label: String, start_time: Int, end_time: Int) -> Nil {
   let duration = end_time - start_time
-  debug_with_fields("Timing", [#("label", label), #("ms", int.to_string(duration))])
+  debug_with_fields("Timing", [
+    #("label", label),
+    #("ms", int.to_string(duration)),
+  ])
 }
 
-pub fn log_timing_with_depth(label: String, depth: Int, start_time: Int, end_time: Int) -> Nil {
+pub fn log_timing_with_depth(
+  label: String,
+  depth: Int,
+  start_time: Int,
+  end_time: Int,
+) -> Nil {
   let duration = end_time - start_time
   debug_with_fields("Timing", [
     #("label", label),

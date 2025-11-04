@@ -6,7 +6,6 @@ import gleam/int
 import gleam/list
 import gleam/order
 import heuristic_config.{type HeuristicConfig}
-import log
 import pathfinding
 
 /// Aggregates all heuristic scores for a given game state
@@ -344,7 +343,7 @@ fn voronoi_control_score(state: GameState, config: HeuristicConfig) -> Float {
     [] -> 0.0
     opponents -> {
       let opponent_heads = list.map(opponents, fn(s) { s.head })
-      
+
       let our_controlled =
         pathfinding.voronoi_territory_fast(
           our_head,
@@ -353,7 +352,8 @@ fn voronoi_control_score(state: GameState, config: HeuristicConfig) -> Float {
         )
 
       let sample_size = list.length(opponent_heads) * 15
-      let control_score = int.to_float(our_controlled) /. int.to_float(sample_size)
+      let control_score =
+        int.to_float(our_controlled) /. int.to_float(sample_size)
       config.weight_voronoi_control *. control_score
     }
   }
@@ -383,7 +383,8 @@ fn competitive_length_score(state: GameState, config: HeuristicConfig) -> Float 
 
       case length_diff {
         diff if diff >= 2 -> 0.0
-        diff if diff >= 0 -> {
+        diff if diff == 1 -> 0.0
+        diff if diff == 0 -> {
           case our_health > config.competitive_length_health_min && food != [] {
             True -> {
               let nearest_food_distance = case

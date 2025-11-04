@@ -9,11 +9,11 @@ import gleam/erlang/process
 import gleam/http.{Get, Post}
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
+import gleam/int
 import gleam/json
 import gleam/list
 import gleam/option.{Some}
 import heuristic_config
-import heuristics
 import log
 import minimax
 import mist
@@ -113,14 +113,6 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
           }
 
           log.log_move_decision(game_state.turn, my_move, score, safe_moves)
-
-          let detailed_scores =
-            heuristics.evaluate_board_detailed(game_state, config)
-          log.log_heuristic_scores(
-            my_move,
-            detailed_scores,
-            heuristics.evaluate_board(game_state, config),
-          )
 
           let request_end = log.get_monotonic_time()
           log.info_with_fields("Move request complete", [

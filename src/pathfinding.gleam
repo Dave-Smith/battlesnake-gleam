@@ -1,29 +1,36 @@
 //// Pathfinding Utility Functions
 
 import api.{type Board, type Coord, type Snake}
+import gleam/deque
 import gleam/list
 import gleam/set.{type Set}
 
 /// Performs a flood fill from a starting coordinate to count accessible safe tiles.
 /// Returns the number of tiles reachable without hitting walls or snake bodies.
 pub fn flood_fill(start: Coord, board: Board, snakes: List(Snake)) -> Int {
-  flood_fill_helper([start], set.from_list([start]), board, snakes)
+  flood_fill_helper(
+    deque.from_list([start]),
+    set.from_list([start]),
+    board,
+    snakes,
+  )
 }
 
 fn flood_fill_helper(
-  queue: List(Coord),
+  q: deque.Deque(Coord),
   visited: Set(Coord),
   board: Board,
   snakes: List(Snake),
 ) -> Int {
-  case queue {
-    [] -> set.size(visited)
-    [current, ..rest] -> {
+  case deque.pop_front(q) {
+    Error(Nil) -> set.size(visited)
+    Ok(#(current, rest)) -> {
       let neighbors = get_valid_neighbors(current, board, snakes, visited)
-      let new_visited = list.fold(neighbors, visited, fn(acc, coord) {
-        set.insert(acc, coord)
-      })
-      flood_fill_helper(list.append(rest, neighbors), new_visited, board, snakes)
+      let new_visited =
+        list.fold(neighbors, visited, fn(acc, coord) { set.insert(acc, coord) })
+      let new_queue =
+        list.fold(neighbors, rest, fn(acc, item) { deque.push_back(acc, item) })
+      flood_fill_helper(new_queue, new_visited, board, snakes)
     }
   }
 }
@@ -72,31 +79,38 @@ pub fn bfs_distance(
   board: Board,
   snakes: List(Snake),
 ) -> Int {
-  bfs_helper([#(start, 0)], set.from_list([start]), target, board, snakes)
+  bfs_helper(
+    deque.from_list([#(start, 0)]),
+    set.from_list([start]),
+    target,
+    board,
+    snakes,
+  )
 }
 
 fn bfs_helper(
-  queue: List(#(Coord, Int)),
+  q: deque.Deque(#(Coord, Int)),
   visited: Set(Coord),
   target: Coord,
   board: Board,
   snakes: List(Snake),
 ) -> Int {
-  case queue {
-    [] -> -1
-    [#(current, distance), ..rest] -> {
-      case current == target {
+  case deque.pop_front(q) {
+    Error(_) -> -1
+    Ok(#(current, rest)) -> {
+      let #(coord, distance) = current
+      case coord == target {
         True -> distance
         False -> {
-          let neighbors = get_valid_neighbors(current, board, snakes, visited)
+          let neighbors = get_valid_neighbors(coord, board, snakes, visited)
           let new_queue =
-            list.append(
-              rest,
-              list.map(neighbors, fn(n) { #(n, distance + 1) }),
-            )
-          let new_visited = list.fold(neighbors, visited, fn(acc, coord) {
-            set.insert(acc, coord)
-          })
+            list.fold(neighbors, rest, fn(acc, n) {
+              deque.push_back(acc, #(n, distance + 1))
+            })
+          let new_visited =
+            list.fold(neighbors, visited, fn(acc, coord) {
+              set.insert(acc, coord)
+            })
           bfs_helper(new_queue, new_visited, target, board, snakes)
         }
       }
@@ -117,10 +131,11 @@ pub fn voronoi_territory_fast(
 
   list.fold(sample_tiles, 0, fn(acc, tile) {
     let our_distance = manhattan_distance(start, tile)
-    
-    let we_are_closest = list.all(opponent_heads, fn(opp_head) {
-      manhattan_distance(opp_head, tile) > our_distance
-    })
+
+    let we_are_closest =
+      list.all(opponent_heads, fn(opp_head) {
+        manhattan_distance(opp_head, tile) > our_distance
+      })
 
     case we_are_closest {
       True -> acc + 1
@@ -137,7 +152,7 @@ pub fn voronoi_territory_fast(
 fn get_strategic_sample_tiles(board: Board) -> List(Coord) {
   let center_x = board.width / 2
   let center_y = board.height / 2
-  
+
   let center_tiles = [
     api.Coord(center_x, center_y),
     api.Coord(center_x - 1, center_y),
