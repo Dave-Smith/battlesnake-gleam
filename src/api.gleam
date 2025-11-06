@@ -1,6 +1,8 @@
+import gleam/deque
 import gleam/dynamic/decode
 import gleam/json
 import gleam/option.{type Option, None, Some}
+import gleam/set
 
 pub type Coord {
   Coord(x: Int, y: Int)
@@ -28,7 +30,8 @@ pub type Snake {
     id: String,
     name: String,
     health: Int,
-    body: List(Coord),
+    body: deque.Deque(Coord),
+    body_coord: set.Set(Coord),
     head: Coord,
     length: Int,
   )
@@ -39,7 +42,7 @@ pub fn snake_to_json(snake: Snake) -> json.Json {
     #("id", json.string(snake.id)),
     #("name", json.string(snake.name)),
     #("health", json.int(snake.health)),
-    #("body", json.array(snake.body, of: coord_to_json)),
+    #("body", json.array(deque.to_list(snake.body), of: coord_to_json)),
     #("head", coord_to_json(snake.head)),
     #("length", json.int(snake.length)),
   ])
@@ -52,7 +55,15 @@ fn snake_decoder() -> decode.Decoder(Snake) {
   use body <- decode.field("body", decode.list(coord_decoder()))
   use head <- decode.field("head", coord_decoder())
   use length <- decode.field("length", decode.int)
-  decode.success(Snake(id, name, health, body, head, length))
+  decode.success(Snake(
+    id,
+    name,
+    health,
+    deque.from_list(body),
+    set.from_list(body),
+    head,
+    length,
+  ))
 }
 
 pub fn snake_from_json(json_string: String) -> Result(Snake, json.DecodeError) {

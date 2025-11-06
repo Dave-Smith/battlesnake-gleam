@@ -1,6 +1,7 @@
 //// Pathfinding Utility Functions
 
 import api.{type Board, type Coord, type Snake}
+import game_state
 import gleam/deque
 import gleam/list
 import gleam/set.{type Set}
@@ -62,13 +63,7 @@ fn is_valid_tile(coord: Coord, board: Board, snakes: List(Snake)) -> Bool {
 }
 
 fn is_occupied_by_snake(coord: Coord, snakes: List(Snake)) -> Bool {
-  list.any(snakes, fn(s) {
-    let body_without_tail = case list.reverse(s.body) {
-      [_, ..rest] -> list.reverse(rest)
-      [] -> []
-    }
-    list.any(body_without_tail, fn(body_coord) { body_coord == coord })
-  })
+  game_state.is_occupied_by_snake_without_tail(coord, snakes)
 }
 
 /// Performs BFS to find the shortest path distance to a target.

@@ -2,9 +2,11 @@
 
 import api.{type GameState}
 import game_state.{manhattan_distance}
+import gleam/deque
 import gleam/int
 import gleam/list
 import gleam/order
+import gleam/set
 import heuristic_config.{type HeuristicConfig}
 import pathfinding
 
@@ -135,8 +137,16 @@ fn safety_self_collision_score(
 ) -> Float {
   let head = state.you.head
   let body = state.you.body
-  case list.any(list.drop(body, 1), fn(coord) { coord == head }) {
-    True -> config.weight_safety_self_collision
+  let tail = case deque.pop_front(body) {
+    Ok(#(t, _)) -> t
+    Error(_) -> head
+  }
+  case set.contains(state.you.body_coord, head) {
+    True ->
+      case head == tail {
+        True -> 0.0
+        False -> config.weight_safety_self_collision
+      }
     False -> 0.0
   }
 }
@@ -268,9 +278,9 @@ fn food_health_score(state: GameState, config: HeuristicConfig) -> Float {
 fn tail_chasing_score(state: GameState, config: HeuristicConfig) -> Float {
   let our_health = state.you.health
   let our_head = state.you.head
-  let our_tail = case list.reverse(state.you.body) {
-    [tail, ..] -> tail
-    [] -> our_head
+  let our_tail = case deque.pop_back(state.you.body) {
+    Ok(#(tail_coord, _)) -> tail_coord
+    Error(_) -> our_head
   }
 
   let accessible_tiles =
@@ -355,6 +365,74 @@ fn voronoi_control_score(state: GameState, config: HeuristicConfig) -> Float {
       let control_score =
         int.to_float(our_controlled) /. int.to_float(sample_size)
       config.weight_voronoi_control *. control_score
+    }
+  }
+}
+
+/// I. Food Competition Detection - detect when opponents are aggressively hoarding food
+pub fn detect_food_competition(state: GameState) -> Float {
+  let our_head = state.you.head
+  let our_length = state.you.length
+  let food = state.board.food
+  let opponent_snakes =
+    list.filter(state.board.snakes, fn(s) { s.id != state.you.id })
+
+  case opponent_snakes {
+    [] -> 0.0
+    opponents -> {
+      let num_snakes = list.length(state.board.snakes)
+      let food_scarcity_score = case list.length(food) {
+        0 -> 1.0
+        food_count -> {
+          let food_per_snake =
+            int.to_float(food_count) /. int.to_float(num_snakes)
+          case food_per_snake <. 1.5 {
+            True -> 1.0 -. food_per_snake /. 1.5
+            False -> 0.0
+          }
+        }
+      }
+
+      let competition_for_food =
+        list.fold(food, 0.0, fn(acc, food_coord) {
+          let our_distance = manhattan_distance(our_head, food_coord)
+          let closer_opponents =
+            list.count(opponents, fn(opp) {
+              let opp_distance = manhattan_distance(opp.head, food_coord)
+              let length_factor =
+                int.to_float(opp.length) /. int.to_float(our_length)
+              opp_distance < our_distance && length_factor >. 0.9
+            })
+          acc +. int.to_float(closer_opponents)
+        })
+
+      let total_food_positions = int.to_float(list.length(food))
+      let competition_ratio = case total_food_positions {
+        0.0 -> 0.0
+        _ -> competition_for_food /. total_food_positions
+      }
+
+      let avg_opponent_length =
+        list.fold(opponents, 0, fn(acc, s) { acc + s.length })
+        |> int.to_float
+        |> fn(total) { total /. int.to_float(list.length(opponents)) }
+
+      let length_dominance = avg_opponent_length /. int.to_float(our_length)
+
+      let final_score =
+        { food_scarcity_score *. 0.4 }
+        +. { competition_ratio *. 0.4 }
+        +. {
+          case length_dominance >. 1.1 {
+            True -> 0.2
+            False -> 0.0
+          }
+        }
+
+      case final_score >. 1.0 {
+        True -> 1.0
+        False -> final_score
+      }
     }
   }
 }

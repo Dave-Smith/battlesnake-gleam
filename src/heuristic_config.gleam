@@ -54,7 +54,7 @@ pub fn default_config() -> HeuristicConfig {
     weight_safety_self_collision: -1000.0,
     weight_safety_head_collision_longer: -800.0,
     weight_safety_head_collision_shorter: 50.0,
-    weight_flood_fill: 2.0,
+    weight_flood_fill: 5.0,
     weight_avoid_adjacent_heads: -150.0,
     weight_avoid_adjacent_heads_longer: 20.0,
     weight_center_control: 50.0,
@@ -77,9 +77,10 @@ pub fn default_config() -> HeuristicConfig {
 pub fn aggressive_config() -> HeuristicConfig {
   HeuristicConfig(
     ..default_config(),
-    weight_flood_fill: 1.5,
+    weight_flood_fill: 3.5,
     weight_avoid_adjacent_heads_longer: 50.0,
     weight_center_control: 150.0,
+    competitive_length_health_min: 20,
   )
 }
 

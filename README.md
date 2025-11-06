@@ -35,6 +35,15 @@ Key strategic elements include:
   - Critical priority (250) when behind in length, moderate (150) when tied
   - Only triggers when health >50 to avoid desperate situations
   - Enables aggressive head-to-head plays when longer than opponents
+- **Adaptive Food Competition Detection:** Dynamically adjusts strategy when facing food-aggressive opponents:
+  - Detects aggression signals: food scarcity (<1.5 food per snake), opponents closer to most food, length disadvantage
+  - Calculates competition score (0.0-1.0) from current board state each turn
+  - When competition >0.6, switches to competitive mode:
+    - Increases food priority (300 → 500)
+    - Increases length competition weights (150/250 → 200/400)
+    - Seeks food earlier (health <50 vs <35)
+    - Reduces tail-chasing to prioritize growth
+  - No state tracking needed - purely reactive to current game conditions
 
 ## Performance Optimization
 
@@ -50,7 +59,14 @@ To maintain sub-500ms response times:
 
 ## Development Plan & Heuristics
 
-A comprehensive `GAME_PLAN.md` file details the architecture, specific heuristic definitions, and the approach for future enhancements.
+A comprehensive `GAME_PLAN.md` file details the architecture and approach for future enhancements.
+
+**For detailed heuristics documentation**, see [HEURISTICS.md](HEURISTICS.md), which provides:
+- Complete documentation of all 11 heuristics
+- Weight value impacts and tuning guidelines
+- Pre-configured setups (default, aggressive, defensive, adaptive)
+- Effects of enabling/disabling each heuristic
+- Configuration parameters and their impacts
 
 ## Getting Started
 

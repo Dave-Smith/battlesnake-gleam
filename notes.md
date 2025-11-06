@@ -6,3 +6,5 @@ I had to write some code. The AI could not figure out the old versions of json p
 Running game locally
 - Install Battlesnakes CLI go install github.com/BattlesnakeOfficial/rules/cli/battlesnake@latest
 - ╰─ battlesnake play -W 11 -H 11 --name 'dave1' --url http://localhost:8080 --name 'dave2' --url http://localhost:8080 --viewmap                                                     ─╯
+
+Added a test snake named [Esproso](https://github.com/Tch1b0/Esproso) that I found on GitHub to my local testing. This snake is super aggressive in food finding. My snakes posture is to stay small and find food when competitors start growing or when my health is below a threshold. This new competitor caused food scarcity quickly causing my snake to prioritize food over safety. I need to tweak the heuristic weights to match the agressive food finding to not be started and making poor choices.

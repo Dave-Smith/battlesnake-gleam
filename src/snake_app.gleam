@@ -1,3 +1,4 @@
+import adaptive_config
 import api.{
   type GameState, game_state_from_json, index_response_to_json,
   move_response_to_json,
@@ -13,7 +14,6 @@ import gleam/int
 import gleam/json
 import gleam/list
 import gleam/option.{Some}
-import heuristic_config
 import log
 import minimax
 import mist
@@ -51,11 +51,11 @@ fn calculate_dynamic_depth(game_state: GameState) -> Int {
 
   case num_snakes {
     1 -> 10
-    2 -> 9
+    2 -> 8
     _ ->
       case board_density > 40 {
         True -> 5
-        False -> 7
+        False -> 6
       }
   }
 }
@@ -66,10 +66,10 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
       let response_data =
         api.IndexResponse(
           apiversion: "1",
-          author: "your-github-username",
-          color: "#888888",
-          head: "default",
-          tail: "default",
+          author: "gleam-in-the-simulation",
+          color: "#ffffff",
+          head: "crystal-power",
+          tail: "crystal-power",
           version: "0.0.1",
         )
       json_response(json.to_string(index_response_to_json(response_data)))
@@ -94,7 +94,7 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
       case parse_game_state(req) {
         Ok(game_state) -> {
           let request_start = log.get_monotonic_time()
-          let config = heuristic_config.default_config()
+          let config = adaptive_config.get_adaptive_config(game_state)
           let safe_moves = get_safe_moves(game_state)
 
           let #(my_move, score) = case safe_moves {

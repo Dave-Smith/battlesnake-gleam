@@ -13,6 +13,8 @@ pub type LogLevel {
   Error
 }
 
+pub const enable_debug: Bool = True
+
 fn level_to_string(level: LogLevel) -> String {
   case level {
     Debug -> "DEBUG"
@@ -50,17 +52,21 @@ pub fn info_with_fields(message: String, fields: List(#(String, String))) -> Nil
   log(Info, message, fields)
 }
 
-pub fn debug(_message: String) -> Nil {
-  Nil
-  // log(Debug, message, [])
+pub fn debug(message: String) -> Nil {
+  case enable_debug {
+    True -> log(Debug, message, [])
+    False -> Nil
+  }
 }
 
 pub fn debug_with_fields(
-  _message: String,
-  _fields: List(#(String, String)),
+  message: String,
+  fields: List(#(String, String)),
 ) -> Nil {
-  Nil
-  // log(Debug, message, fields)
+  case enable_debug {
+    True -> log(Debug, message, fields)
+    False -> Nil
+  }
 }
 
 pub fn warning(message: String) -> Nil {

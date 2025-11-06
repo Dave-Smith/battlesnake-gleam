@@ -1,8 +1,10 @@
 //// Game State Utility Functions
 
 import api.{type Board, type Coord, type GameState, type Snake}
+import gleam/deque
 import gleam/int
 import gleam/list
+import gleam/set
 
 /// Calculates the Manhattan distance between two coordinates.
 pub fn manhattan_distance(a: Coord, b: Coord) -> Int {
@@ -20,7 +22,8 @@ pub fn is_within_bounds(coord: Coord, board: Board) -> Bool {
 /// Checks if a coordinate is occupied by any snake's body (including its head and tail).
 pub fn is_occupied_by_snake_body(coord: Coord, snakes: List(Snake)) -> Bool {
   list.any(snakes, fn(s) {
-    list.any(s.body, fn(body_coord) { body_coord == coord })
+    set.contains(s.body_coord, coord)
+    //list.any(s.body, fn(body_coord) { body_coord == coord })
   })
 }
 
@@ -30,12 +33,18 @@ pub fn is_occupied_by_snake_body_next_turn(
   coord: Coord,
   snakes: List(Snake),
 ) -> Bool {
+  is_occupied_by_snake_without_tail(coord, snakes)
+}
+
+/// Checks if a coordinate is occupied by any snake's body excluding the tail.
+pub fn is_occupied_by_snake_without_tail(
+  coord: Coord,
+  snakes: List(Snake),
+) -> Bool {
   list.any(snakes, fn(s) {
-    // A snake's tail position will be free on the next turn if it moves,
-    // unless it just ate food. We're simplifying for now by always freeing the tail.
-    let body_without_tail = case list.reverse(s.body) {
-      [_, ..rest] -> list.reverse(rest)
-      [] -> []
+    let body_without_tail = case deque.pop_front(s.body) {
+      Ok(#(_, body_without_tail)) -> deque.to_list(body_without_tail)
+      Error(_) -> []
     }
     list.any(body_without_tail, fn(body_coord) { body_coord == coord })
   })
@@ -99,10 +108,11 @@ pub fn choose_best_move(
   let food = game_state.board.food
 
   case food {
-    [] -> case safe_moves {
-      [first, ..] -> first
-      [] -> "up"
-    }
+    [] ->
+      case safe_moves {
+        [first, ..] -> first
+        [] -> "up"
+      }
     _ -> {
       let nearest_food = case
         list.sort(food, fn(a, b) {
@@ -137,10 +147,11 @@ pub fn choose_best_move(
         })
       {
         [#(best_move, _), ..] -> best_move
-        [] -> case safe_moves {
-          [first, ..] -> first
-          [] -> "up"
-        }
+        [] ->
+          case safe_moves {
+            [first, ..] -> first
+            [] -> "up"
+          }
       }
     }
   }
@@ -157,12 +168,18 @@ pub fn simulate_move(snake: Snake, move: String) -> Snake {
     _ -> snake.head
   }
 
-  let new_body =
-    list.append([new_head], list.take(snake.body, snake.length - 1))
+  let res =
+    deque.push_back(snake.body, new_head)
+    |> deque.pop_front
+
+  let new_snake = case res {
+    Ok(#(_, new_body)) -> new_body
+    Error(_) -> snake.body
+  }
 
   let new_health = snake.health - 1
 
-  api.Snake(..snake, head: new_head, body: new_body, health: new_health)
+  api.Snake(..snake, head: new_head, body: new_snake, health: new_health)
 }
 
 /// Simulates a game state after a given snake makes a move.
