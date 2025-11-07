@@ -10,6 +10,7 @@ import gleam/string
 import heuristic_config.{type HeuristicConfig}
 import heuristics
 import log
+import pathfinding
 
 pub type MinimaxResult {
   MinimaxResult(move: String, score: Float)
@@ -28,8 +29,31 @@ pub fn choose_move(
     [] -> MinimaxResult(move: "up", score: -999_999.0)
     [single] -> MinimaxResult(move: single, score: 0.0)
     moves -> {
+      // Filter moves that lead to sufficient space
+      let min_space = state.you.length
+      let moves_with_space =
+        list.filter_map(moves, fn(move) {
+          let next_state = simulate_game_state(state, move)
+          let space_available =
+            pathfinding.flood_fill(
+              next_state.you.head,
+              next_state.board,
+              next_state.board.snakes,
+            )
+          case space_available >= min_space {
+            True -> Ok(move)
+            False -> Error(Nil)
+          }
+        })
+
+      // Use space-filtered moves if available, otherwise fall back to basic safe moves
+      let evaluated_moves = case moves_with_space {
+        [] -> moves
+        filtered -> filtered
+      }
+
       let move_scores =
-        list.map(moves, fn(move) {
+        list.map(evaluated_moves, fn(move) {
           let next_state = simulate_game_state(state, move)
           let score =
             minimax(next_state, depth - 1, False, -999_999.0, 999_999.0, config)

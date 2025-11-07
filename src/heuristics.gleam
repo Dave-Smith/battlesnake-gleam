@@ -5,13 +5,19 @@ import game_state.{manhattan_distance}
 import gleam/deque
 import gleam/int
 import gleam/list
-import gleam/order
 import gleam/set
 import heuristic_config.{type HeuristicConfig}
 import pathfinding
 
 /// Aggregates all heuristic scores for a given game state
 pub fn evaluate_board(state: GameState, config: HeuristicConfig) -> Float {
+  // Cache flood fill result since it's used by multiple heuristics
+  let cached_space = case config.enable_flood_fill {
+    True ->
+      pathfinding.flood_fill(state.you.head, state.board, state.board.snakes)
+    False -> 0
+  }
+
   let scores = [
     #("safety_boundary", case config.enable_safety_boundary {
       True -> safety_boundary_score(state, config)
@@ -26,7 +32,7 @@ pub fn evaluate_board(state: GameState, config: HeuristicConfig) -> Float {
       False -> 0.0
     }),
     #("flood_fill", case config.enable_flood_fill {
-      True -> flood_fill_score(state, config)
+      True -> int.to_float(cached_space) *. config.weight_flood_fill
       False -> 0.0
     }),
     #("avoid_adjacent_heads", case config.enable_avoid_adjacent_heads {
@@ -70,6 +76,13 @@ pub fn evaluate_board_detailed(
   state: GameState,
   config: HeuristicConfig,
 ) -> List(#(String, Float)) {
+  // Cache flood fill result since it's used by multiple heuristics
+  let cached_space = case config.enable_flood_fill {
+    True ->
+      pathfinding.flood_fill(state.you.head, state.board, state.board.snakes)
+    False -> 0
+  }
+
   [
     #("safety_boundary", case config.enable_safety_boundary {
       True -> safety_boundary_score(state, config)
@@ -84,7 +97,7 @@ pub fn evaluate_board_detailed(
       False -> 0.0
     }),
     #("flood_fill", case config.enable_flood_fill {
-      True -> flood_fill_score(state, config)
+      True -> int.to_float(cached_space) *. config.weight_flood_fill
       False -> 0.0
     }),
     #("avoid_adjacent_heads", case config.enable_avoid_adjacent_heads {
@@ -172,14 +185,6 @@ fn safety_head_collision_score(
       False -> acc
     }
   })
-}
-
-/// B. Flood Fill - count accessible tiles from current head position
-fn flood_fill_score(state: GameState, config: HeuristicConfig) -> Float {
-  let head = state.you.head
-  let accessible_tiles =
-    pathfinding.flood_fill(head, state.board, state.board.snakes)
-  int.to_float(accessible_tiles) *. config.weight_flood_fill
 }
 
 /// C. Avoid Adjacent Opponent Heads - penalize being next to opponent heads
@@ -299,7 +304,9 @@ fn tail_chasing_score(state: GameState, config: HeuristicConfig) -> Float {
   }
 }
 
-/// F. Food Safety - evaluate safety of food positions before moving towards them
+/// F. Food Safety - Simple, efficient food targeting
+/// When hungry: reward moving toward closest food ≤10 moves away
+/// Also reward moves toward food clusters (multiple food in an area)
 fn food_safety_score(state: GameState, config: HeuristicConfig) -> Float {
   let our_head = state.you.head
   let our_health = state.you.health
@@ -307,34 +314,42 @@ fn food_safety_score(state: GameState, config: HeuristicConfig) -> Float {
 
   case our_health < config.health_threshold && food != [] {
     True -> {
-      let current_space =
-        pathfinding.flood_fill(our_head, state.board, state.board.snakes)
-
-      let food_with_space =
+      // Find closest food
+      let food_with_distance =
         list.map(food, fn(food_coord) {
           let distance = manhattan_distance(our_head, food_coord)
-          let space_after =
-            pathfinding.flood_fill(food_coord, state.board, state.board.snakes)
-          #(food_coord, distance, space_after)
+          #(food_coord, distance)
         })
 
-      let nearest_safe_food = case
-        list.sort(food_with_space, fn(a, b) {
-          let #(_, dist_a, space_a) = a
-          let #(_, dist_b, space_b) = b
-          case int.compare(dist_a, dist_b) {
-            order.Eq -> int.compare(space_b, space_a)
-            other -> other
+      let sorted_food =
+        list.sort(food_with_distance, fn(a, b) {
+          let #(_, dist_a) = a
+          let #(_, dist_b) = b
+          int.compare(dist_a, dist_b)
+        })
+
+      case sorted_food {
+        [#(closest_food, distance), ..] -> {
+          case distance <= 10 {
+            True -> {
+              // Reward moves toward close food
+              let distance_score = { 10.0 -. int.to_float(distance) } *. 10.0
+
+              // Bonus for food clusters (count food within 5 tiles of closest food)
+              let cluster_count =
+                list.filter(food, fn(f) {
+                  manhattan_distance(closest_food, f) <= 5
+                })
+                |> list.length
+
+              let cluster_bonus = int.to_float(cluster_count) *. 5.0
+
+              distance_score +. cluster_bonus
+            }
+            False -> 0.0
           }
-        })
-      {
-        [#(_, _, space_after), ..] -> space_after
-        [] -> current_space
-      }
-
-      case nearest_safe_food < current_space - 10 {
-        True -> config.weight_food_safety_penalty
-        False -> 0.0
+        }
+        [] -> 0.0
       }
     }
     False -> 0.0

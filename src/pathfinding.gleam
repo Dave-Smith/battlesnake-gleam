@@ -1,7 +1,7 @@
 //// Pathfinding Utility Functions
 
 import api.{type Board, type Coord, type Snake}
-import game_state
+import board_state
 import gleam/deque
 import gleam/list
 import gleam/set.{type Set}
@@ -50,20 +50,8 @@ fn get_valid_neighbors(
   ]
 
   list.filter(possible, fn(c) {
-    is_valid_tile(c, board, snakes) && !set.contains(visited, c)
+    board_state.is_valid_tile(c, board, snakes) && !set.contains(visited, c)
   })
-}
-
-fn is_valid_tile(coord: Coord, board: Board, snakes: List(Snake)) -> Bool {
-  coord.x >= 0
-  && coord.y >= 0
-  && coord.x < board.width
-  && coord.y < board.height
-  && !is_occupied_by_snake(coord, snakes)
-}
-
-fn is_occupied_by_snake(coord: Coord, snakes: List(Snake)) -> Bool {
-  game_state.is_occupied_by_snake_without_tail(coord, snakes)
 }
 
 /// Performs BFS to find the shortest path distance to a target.

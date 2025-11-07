@@ -155,6 +155,8 @@ The snake's decision-making is powered by 11 distinct heuristics that evaluate b
 **Purpose**: Maximizes accessible territory to avoid being trapped.
 
 **Behavior**: Counts reachable tiles from current position using BFS. Score = accessible_tiles × 5.0.
+- **Optimization**: Result is cached once per board state and reused by multiple heuristics
+- **Move Safety**: Moves leading to areas smaller than snake length are filtered before evaluation
 
 **Increasing weight** (e.g., to 10.0): Strongly prioritizes open space, may avoid tight areas even with food.
 
@@ -261,18 +263,24 @@ The snake's decision-making is powered by 11 distinct heuristics that evaluate b
 
 ### F. Food Safety (`enable_food_safety`)
 
-**Weight**: `weight_food_safety_penalty = -50.0`
+**Purpose**: Efficient food targeting with cluster awareness.
 
-**Purpose**: Evaluates whether eating food would trap the snake.
+**Behavior**: When health < threshold:
+- Finds closest food within 10 moves (Manhattan distance)
+- Rewards moves toward that food: `(10 - distance) × 10.0`
+- Bonus for food clusters: `cluster_count × 5.0` (food within 5 tiles of target)
+- **Optimization**: O(F) distance checks instead of O(F × board_size) flood fills
 
-**Behavior**: When health < threshold, checks if moving to nearest food reduces accessible space by >10 tiles.
-- If eating food traps us: -50 penalty
+**Increasing distance limit** (e.g., to 15): Considers more distant food as viable targets.
 
-**Increasing penalty** (e.g., to -150.0): Very conservative about unsafe food, may starve avoiding risky food.
+**Decreasing distance limit** (e.g., to 5): Only targets very close food, may starve in sparse games.
 
-**Decreasing penalty** (e.g., to -20.0): More willing to eat risky food.
+**Disabling**: Snake loses food-seeking behavior when hungry. **HIGH RISK** - will likely starve.
 
-**Disabling**: Snake may eat food that traps it. Useful in desperate situations but increases risk.
+**Examples**:
+- Food 2 tiles away, 3 food in cluster: (10-2)×10 + 3×5 = 80 + 15 = +95 score
+- Food 8 tiles away, solo: (10-8)×10 = +20 score
+- Food 11 tiles away: 0 score (too far)
 
 ---
 
@@ -407,6 +415,9 @@ The snake's decision-making is powered by 11 distinct heuristics that evaluate b
 ## Performance Notes
 
 - **Minimax Depth**: Dynamically adjusted (5-10) based on game state density
+- **Flood Fill Caching**: Computed once per board state, reused by multiple heuristics
+- **Move Filtering**: Space-unsafe moves (leading to areas < snake length) filtered before minimax
+- **Food Targeting**: O(F) distance-based approach instead of O(F × board_size) flood fills
 - **Voronoi Optimization**: ~25 tile sampling vs full board (5000x+ faster)
 - **Logging**: Minimal per-move logging to stay under 500ms response time
 - **Alpha-Beta Pruning**: Dramatically reduces nodes evaluated (up to 90% reduction)
