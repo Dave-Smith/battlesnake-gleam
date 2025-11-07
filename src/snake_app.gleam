@@ -3,10 +3,11 @@ import api.{
   type GameState, game_state_from_json, index_response_to_json,
   move_response_to_json,
 }
-import game_state.{get_safe_moves}
+import game_state.{get_safe_moves, simulate_game_state}
 import gleam/bit_array
 import gleam/bytes_tree
 import gleam/erlang/process
+import gleam/float
 import gleam/http.{Get, Post}
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
@@ -14,6 +15,7 @@ import gleam/int
 import gleam/json
 import gleam/list
 import gleam/option.{Some}
+import heuristics
 import log
 import minimax
 import mist
@@ -27,6 +29,21 @@ fn json_response(body: String) -> Response(mist.ResponseData) {
 fn empty_response() -> Response(mist.ResponseData) {
   response.new(200)
   |> response.set_body(mist.Bytes(bytes_tree.new()))
+}
+
+fn float_to_string(f: Float) -> String {
+  let rounded = float.round(f)
+  let int_part = float.truncate(f)
+  case int.to_float(rounded) == f {
+    True -> int.to_string(int_part)
+    False -> {
+      let decimal_part =
+        float.truncate({ f -. int.to_float(int_part) } *. 100.0)
+      int.to_string(int_part)
+      <> "."
+      <> int.to_string(int.absolute_value(decimal_part))
+    }
+  }
 }
 
 fn parse_game_state(
@@ -112,7 +129,51 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
             }
             _ -> {
               let depth = calculate_dynamic_depth(game_state)
+
+              // DEBUG: Log depth-0 heuristic scores for ALL possible moves
+              log.info_with_fields("=== DEPTH 0 EVALUATION ===", [
+                #("turn", int.to_string(game_state.turn)),
+              ])
+              list.each(safe_moves, fn(move) {
+                let simulated_state = simulate_game_state(game_state, move)
+                let detailed_scores =
+                  heuristics.evaluate_board_detailed(simulated_state, config)
+                let total_score =
+                  heuristics.evaluate_board(simulated_state, config)
+                log.log_heuristic_scores(move, detailed_scores, total_score)
+              })
+
+              // Run minimax
+              log.info_with_fields("=== MINIMAX EVALUATION ===", [
+                #("depth", int.to_string(depth)),
+              ])
               let result = minimax.choose_move(game_state, depth, config)
+
+              // DEBUG: Log final minimax scores
+              let minimax_scores =
+                list.map(safe_moves, fn(move) {
+                  let next_state = simulate_game_state(game_state, move)
+                  let score =
+                    minimax.minimax(
+                      next_state,
+                      depth - 1,
+                      False,
+                      -999_999.0,
+                      999_999.0,
+                      config,
+                    )
+                  log.info_with_fields("Minimax score", [
+                    #("move", move),
+                    #("score", float_to_string(score)),
+                  ])
+                  #(move, score)
+                })
+
+              log.info_with_fields("=== FINAL DECISION ===", [
+                #("chosen_move", result.move),
+                #("chosen_score", float_to_string(result.score)),
+              ])
+
               #(result.move, result.score)
             }
           }

@@ -24,6 +24,15 @@ fn find_nearest_food(from: api.Coord, food: List(api.Coord)) -> Int {
   }
 }
 
+/// Helper: Calculate logarithmic distance factor for food scoring
+/// Makes nearby food MUCH more valuable than distant food
+/// Distance 1: 1.0 (100%), Distance 2: 0.67 (67%), Distance 3: 0.5 (50%), Distance 4: 0.4 (40%)
+fn food_distance_factor(distance: Int) -> Float {
+  // Logarithmic decay: 1.0 / (0.5 * distance + 0.5)
+  // This creates steep drop-off for nearby food
+  1.0 /. { 0.5 *. int.to_float(distance) +. 0.5 }
+}
+
 /// Aggregates all heuristic scores for a given game state
 pub fn evaluate_board(state: GameState, config: HeuristicConfig) -> Float {
   // Cache flood fill result since it's used by multiple heuristics
@@ -60,6 +69,10 @@ pub fn evaluate_board(state: GameState, config: HeuristicConfig) -> Float {
     }),
     #("center_control", case config.enable_center_control {
       True -> center_control_score(state, config)
+      False -> 0.0
+    }),
+    #("early_game_food", case config.enable_early_game_food {
+      True -> early_game_food_score(state, config)
       False -> 0.0
     }),
     #("food_health", case config.enable_food_health {
@@ -129,6 +142,10 @@ pub fn evaluate_board_detailed(
     }),
     #("center_control", case config.enable_center_control {
       True -> center_control_score(state, config)
+      False -> 0.0
+    }),
+    #("early_game_food", case config.enable_early_game_food {
+      True -> early_game_food_score(state, config)
       False -> 0.0
     }),
     #("food_health", case config.enable_food_health {
@@ -310,7 +327,24 @@ fn center_control_score(state: GameState, config: HeuristicConfig) -> Float {
   }
 }
 
-/// D. Food Health - prioritize food when health is low
+/// D. Early Game Food - prioritize growing in the first 50 turns
+/// Safety still comes first, but we actively seek food to build length
+fn early_game_food_score(state: GameState, config: HeuristicConfig) -> Float {
+  let our_head = state.you.head
+  let food = state.board.food
+  let is_early_game = state.turn < config.early_game_food_turn_threshold
+
+  case is_early_game && food != [] {
+    True -> {
+      let nearest_food_distance = find_nearest_food(our_head, food)
+      let distance_factor = food_distance_factor(nearest_food_distance)
+      config.weight_early_game_food *. distance_factor
+    }
+    False -> 0.0
+  }
+}
+
+/// E. Food Health - prioritize food when health is low
 fn food_health_score(state: GameState, config: HeuristicConfig) -> Float {
   let our_health = state.you.health
   let our_head = state.you.head
@@ -319,15 +353,14 @@ fn food_health_score(state: GameState, config: HeuristicConfig) -> Float {
   case our_health < config.health_threshold && food != [] {
     True -> {
       let nearest_food_distance = find_nearest_food(our_head, food)
-      let distance_factor =
-        1.0 /. { int.to_float(nearest_food_distance) +. 1.0 }
+      let distance_factor = food_distance_factor(nearest_food_distance)
       config.weight_food_health *. distance_factor
     }
     False -> 0.0
   }
 }
 
-/// E. Tail Chasing - follow our tail when healthy and space is limited
+/// F. Tail Chasing - follow our tail when healthy and space is limited
 fn tail_chasing_score(state: GameState, config: HeuristicConfig) -> Float {
   let our_health = state.you.health
   let our_head = state.you.head
@@ -525,8 +558,7 @@ fn competitive_length_score(state: GameState, config: HeuristicConfig) -> Float 
           case our_health > config.competitive_length_health_min && food != [] {
             True -> {
               let nearest_food_distance = find_nearest_food(our_head, food)
-              let distance_factor =
-                1.0 /. { int.to_float(nearest_food_distance) +. 1.0 }
+              let distance_factor = food_distance_factor(nearest_food_distance)
               config.weight_competitive_length *. distance_factor
             }
             False -> 0.0
@@ -536,8 +568,7 @@ fn competitive_length_score(state: GameState, config: HeuristicConfig) -> Float 
           case our_health > config.competitive_length_health_min && food != [] {
             True -> {
               let nearest_food_distance = find_nearest_food(our_head, food)
-              let distance_factor =
-                1.0 /. { int.to_float(nearest_food_distance) +. 1.0 }
+              let distance_factor = food_distance_factor(nearest_food_distance)
               config.weight_competitive_length_critical *. distance_factor
             }
             False -> 0.0
