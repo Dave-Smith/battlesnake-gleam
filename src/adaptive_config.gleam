@@ -1,39 +1,66 @@
 //// Adaptive Configuration Module
-//// Dynamically adjusts heuristic weights based on opponent behavior
+//// Dynamically adjusts heuristic weights based on game phase and opponent behavior
 
 import api.{type GameState}
 import gleam/float
-import heuristic_config.{HeuristicConfig}
-import heuristics
+import gleam/int
+import gleam/list
+import heuristic_config.{type HeuristicConfig}
 import log
 
-/// Returns an adapted configuration based on detected food competition
-pub fn get_adaptive_config(state: GameState) -> heuristic_config.HeuristicConfig {
-  let base_config = heuristic_config.default_config()
-  let competition_score = heuristics.detect_food_competition(state)
+/// Represents the current phase of the game
+pub type GamePhase {
+  EarlyGame  // Turns 1-75, focus on growth and survival
+  MidGame    // Turns 76+, 2+ opponents, focus on positioning
+  LateGame   // 1-2 opponents or cramped space, focus on survival
+}
 
-  let competition_threshold = 0.5
+/// Detects the current game phase based on turn number and opponent count
+pub fn detect_phase(state: GameState) -> GamePhase {
+  let num_opponents =
+    list.length(list.filter(state.board.snakes, fn(s) { s.id != state.you.id }))
 
-  case competition_score >. competition_threshold {
-    True -> {
-      log.info_with_fields(
-        "Adaptive config triggered - food competition detected",
-        [
-          #("competition_score", float.to_string(competition_score)),
-        ],
-      )
+  let board_size = state.board.width * state.board.height
+  let occupied_tiles =
+    list.fold(state.board.snakes, 0, fn(acc, snake) { acc + snake.length })
+  let board_density = occupied_tiles * 100 / board_size
 
-      HeuristicConfig(
-        ..base_config,
-        enable_center_control: False,
-        enable_voronoi_control: False,
-        weight_food_health: 500.0,
-        weight_competitive_length: 200.0,
-        weight_competitive_length_critical: 400.0,
-        health_threshold: 70,
-        weight_tail_chasing: 40.0,
-      )
-    }
-    False -> base_config
+  // Late game: 1-2 opponents OR cramped space (>40% occupied)
+  case num_opponents, board_density {
+    0, _ | 1, _ | 2, _ if board_density > 40 -> LateGame
+    _, density if density > 40 -> LateGame
+    _, _ ->
+      case state.turn {
+        turn if turn <= 75 -> EarlyGame
+        _ -> MidGame
+      }
   }
+}
+
+/// Returns an adapted configuration based on game phase
+pub fn get_adaptive_config(state: GameState) -> HeuristicConfig {
+  let phase = detect_phase(state)
+
+  let phase_config = case phase {
+    EarlyGame -> {
+      log.info_with_fields("Game phase: EARLY GAME", [
+        #("turn", int.to_string(state.turn)),
+      ])
+      heuristic_config.early_game_config()
+    }
+    MidGame -> {
+      log.info_with_fields("Game phase: MID GAME", [
+        #("turn", int.to_string(state.turn)),
+      ])
+      heuristic_config.mid_game_config()
+    }
+    LateGame -> {
+      log.info_with_fields("Game phase: LATE GAME", [
+        #("turn", int.to_string(state.turn)),
+      ])
+      heuristic_config.late_game_config()
+    }
+  }
+
+  phase_config
 }

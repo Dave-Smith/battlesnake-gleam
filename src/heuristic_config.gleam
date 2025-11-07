@@ -148,3 +148,102 @@ pub fn defensive_config() -> HeuristicConfig {
     weight_food_health: 400.0,
   )
 }
+
+/// Early Game Configuration (Turns 1-75)
+/// Focus: Find food, grow length, stay alive
+pub fn early_game_config() -> HeuristicConfig {
+  HeuristicConfig(
+    ..default_config(),
+    // Food is priority
+    enable_early_game_food: True,
+    weight_early_game_food: 300.0,
+    early_game_food_turn_threshold: 75,
+    weight_food_health: 350.0,
+    
+    // Length advantage is valuable
+    enable_competitive_length: True,
+    weight_competitive_length: 200.0,
+    weight_competitive_length_critical: 350.0,
+    
+    // Space is plentiful, lower priority
+    weight_flood_fill: 3.0,
+    
+    // Voronoi is expensive and less useful early
+    enable_voronoi_control: False,
+    
+    // Center control matters less early
+    weight_center_control: 30.0,
+    weight_center_penalty: -10.0,
+    
+    // Tail chasing less important (space available)
+    weight_tail_chasing: 50.0,
+  )
+}
+
+/// Mid Game Configuration (Turns 76+, 2+ opponents)
+/// Focus: Control position, food efficiency, predict threats
+pub fn mid_game_config() -> HeuristicConfig {
+  HeuristicConfig(
+    ..default_config(),
+    // Early game food disabled after turn 75
+    enable_early_game_food: False,
+    
+    // Only eat when necessary
+    weight_food_health: 300.0,
+    health_threshold: 30,
+    
+    // Space control becomes more important
+    weight_flood_fill: 5.0,
+    
+    // Voronoi valuable for positioning
+    enable_voronoi_control: True,
+    weight_voronoi_control: 20.0,
+    
+    // Center control critical
+    enable_center_control: True,
+    weight_center_control: 60.0,
+    weight_center_penalty: -30.0,
+    
+    // Competitive length still matters
+    enable_competitive_length: True,
+    weight_competitive_length: 150.0,
+    weight_competitive_length_critical: 250.0,
+    
+    // Tail chasing for positioning
+    weight_tail_chasing: 80.0,
+  )
+}
+
+/// Late Game Configuration (1-2 opponents OR cramped space)
+/// Focus: Survival, flood fill, tail chasing, board control
+pub fn late_game_config() -> HeuristicConfig {
+  HeuristicConfig(
+    ..default_config(),
+    // No more early game food
+    enable_early_game_food: False,
+    
+    // Food only when desperate
+    weight_food_health: 400.0,
+    health_threshold: 25,
+    
+    // CRITICAL: Don't get trapped
+    weight_flood_fill: 8.0,
+    
+    // Tail chasing to create escape routes
+    weight_tail_chasing: 120.0,
+    tail_chasing_health_threshold: 60,
+    tail_chasing_space_threshold: 40,
+    
+    // Center control very important
+    enable_center_control: True,
+    weight_center_control: 80.0,
+    weight_center_penalty: -40.0,
+    
+    // Voronoi for territory control in endgame
+    enable_voronoi_control: True,
+    weight_voronoi_control: 25.0,
+    
+    // Length less important (staying alive is key)
+    enable_competitive_length: False,
+  )
+}
