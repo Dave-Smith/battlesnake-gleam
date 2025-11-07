@@ -85,41 +85,54 @@ pub fn default_config() -> HeuristicConfig {
   )
 }
 
-/// Default opponent configuration matching the game plan specifications
-pub fn default_config_opponent() -> HeuristicConfig {
+/// Simplified opponent prediction config
+/// Used to predict likely opponent moves (not full strategy)
+/// Focuses on: survival, food, flood fill, avoiding our head
+pub fn opponent_prediction_config() -> HeuristicConfig {
   HeuristicConfig(
+    // Safety is paramount
     enable_safety_boundary: True,
     enable_safety_self_collision: True,
     enable_safety_head_collision: True,
-    enable_flood_fill: True,
-    enable_avoid_adjacent_heads: False,
-    enable_head_collision_danger: True,
-    enable_center_control: False,
-    enable_early_game_food: True,
-    enable_food_health: False,
-    enable_food_safety: False,
-    enable_tail_chasing: False,
-    enable_voronoi_control: False,
-    enable_competitive_length: False,
     weight_safety_boundary: -1000.0,
     weight_safety_self_collision: -1000.0,
     weight_safety_head_collision_longer: -800.0,
     weight_safety_head_collision_shorter: 50.0,
+    
+    // Basic space awareness
+    enable_flood_fill: True,
     weight_flood_fill: 5.0,
-    weight_avoid_adjacent_heads: -150.0,
-    weight_avoid_adjacent_heads_longer: 20.0,
-    weight_head_collision_danger_longer: 150.0,
-    weight_head_collision_danger_equal: -5000.0,
-    weight_center_control: 50.0,
-    weight_center_penalty: -20.0,
-    weight_early_game_food: 250.0,
+    
+    // Food when hungry
+    enable_food_health: True,
     weight_food_health: 300.0,
-    weight_food_safety_penalty: -50.0,
-    weight_tail_chasing: 80.0,
-    weight_voronoi_control: 15.0,
-    weight_competitive_length: 150.0,
-    weight_competitive_length_critical: 250.0,
-    health_threshold: 35,
+    health_threshold: 40,
+    
+    // Avoid colliding with us
+    enable_head_collision_danger: True,
+    weight_head_collision_danger_longer: 100.0,
+    weight_head_collision_danger_equal: -3000.0,
+    
+    // Disable expensive/complex heuristics
+    enable_avoid_adjacent_heads: False,
+    enable_center_control: False,
+    enable_early_game_food: False,
+    enable_food_safety: False,
+    enable_tail_chasing: False,
+    enable_voronoi_control: False,
+    enable_competitive_length: False,
+    
+    // Unused weights (disabled above)
+    weight_avoid_adjacent_heads: 0.0,
+    weight_avoid_adjacent_heads_longer: 0.0,
+    weight_center_control: 0.0,
+    weight_center_penalty: 0.0,
+    weight_early_game_food: 0.0,
+    weight_food_safety_penalty: 0.0,
+    weight_tail_chasing: 0.0,
+    weight_voronoi_control: 0.0,
+    weight_competitive_length: 0.0,
+    weight_competitive_length_critical: 0.0,
     early_game_turn_threshold: 50,
     early_game_food_turn_threshold: 100,
     tail_chasing_health_threshold: 50,

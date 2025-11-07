@@ -19,6 +19,7 @@ import heuristics
 import log
 import minimax
 import mist
+import opponent_ai
 import system
 
 fn json_response(body: String) -> Response(mist.ResponseData) {
@@ -146,6 +147,24 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
                   let #(move, _, score) = triple
                   #(move, score)
                 })
+
+              // DEBUG: Predict nearest opponent's move
+              case opponent_ai.predict_nearest_opponent_move(game_state) {
+                Ok(prediction) -> {
+                  log.info_with_fields("Opponent prediction", [
+                    #("opponent_id", prediction.opponent.id),
+                    #("distance", int.to_string(
+                      game_state.manhattan_distance(
+                        game_state.you.head,
+                        prediction.opponent.head,
+                      ),
+                    )),
+                    #("predicted_move", prediction.predicted_move),
+                    #("score", float_to_string(prediction.score)),
+                  ])
+                }
+                Error(_) -> log.debug("No opponents to predict")
+              }
 
               // DEBUG: Log depth-0 heuristic scores (reusing cached simulations)
               log.info_with_fields("=== DEPTH 0 EVALUATION ===", [
