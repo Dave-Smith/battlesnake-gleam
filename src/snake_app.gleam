@@ -19,6 +19,7 @@ import heuristics
 import log
 import minimax
 import mist
+import system
 
 fn json_response(body: String) -> Response(mist.ResponseData) {
   response.new(200)
@@ -111,6 +112,7 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
       case parse_game_state(req) {
         Ok(game_state) -> {
           let request_start = log.get_monotonic_time()
+          let _ = system.force_gc()
           log.info_with_fields("Move request received", [
             #("turn", int.to_string(game_state.turn)),
             #("num_snakes", int.to_string(list.length(game_state.board.snakes))),
@@ -130,24 +132,38 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
             _ -> {
               let depth = calculate_dynamic_depth(game_state)
 
-              // DEBUG: Log depth-0 heuristic scores for ALL possible moves
+              // Calculate depth-0 scores AND cache simulations for tie-breaking
+              let depth_0_data =
+                list.map(safe_moves, fn(move) {
+                  let simulated_state = simulate_game_state(game_state, move)
+                  let score = heuristics.evaluate_board(simulated_state, config)
+                  #(move, simulated_state, score)
+                })
+
+              // Extract just scores for minimax
+              let depth_0_scores =
+                list.map(depth_0_data, fn(triple) {
+                  let #(move, _, score) = triple
+                  #(move, score)
+                })
+
+              // DEBUG: Log depth-0 heuristic scores (reusing cached simulations)
               log.info_with_fields("=== DEPTH 0 EVALUATION ===", [
                 #("turn", int.to_string(game_state.turn)),
               ])
-              list.each(safe_moves, fn(move) {
-                let simulated_state = simulate_game_state(game_state, move)
+              list.each(depth_0_data, fn(triple) {
+                let #(move, simulated_state, total_score) = triple
                 let detailed_scores =
                   heuristics.evaluate_board_detailed(simulated_state, config)
-                let total_score =
-                  heuristics.evaluate_board(simulated_state, config)
                 log.log_heuristic_scores(move, detailed_scores, total_score)
               })
 
-              // Run minimax
+              // Run minimax with depth-0 scores for tie-breaking
               log.info_with_fields("=== MINIMAX EVALUATION ===", [
                 #("depth", int.to_string(depth)),
               ])
-              let result = minimax.choose_move(game_state, depth, config)
+              let result =
+                minimax.choose_move(game_state, depth, config, depth_0_scores)
 
               // DEBUG: Log final minimax scores
               let minimax_scores =

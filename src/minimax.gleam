@@ -17,10 +17,12 @@ pub type MinimaxResult {
 }
 
 /// Public interface for choosing the best move using Minimax
+/// Now accepts optional depth-0 scores for tie-breaking
 pub fn choose_move(
   state: GameState,
   depth: Int,
   config: HeuristicConfig,
+  depth_0_scores: List(#(String, Float)),
 ) -> MinimaxResult {
   let start_time = log.get_monotonic_time()
   let safe_moves = get_safe_moves(state)
@@ -61,18 +63,59 @@ pub fn choose_move(
         })
 
       let tie_breaker = calculate_tie_breaker(state.you.id, state.turn)
+      
+      // Threshold for considering scores "close enough" to use depth-0 tie-breaker
+      let convergence_threshold = 50.0
 
       case
         list.sort(move_scores, fn(a, b) {
           let #(move_a, score_a) = a
           let #(move_b, score_b) = b
-          case float.compare(score_b, with: score_a) {
-            order.Eq -> {
-              let bias_a = get_move_bias(move_a, tie_breaker)
-              let bias_b = get_move_bias(move_b, tie_breaker)
-              float.compare(bias_b, bias_a)
+          
+          let score_diff = float.absolute_value(score_a -. score_b)
+          
+          // If scores are very close, use depth-0 score as tie-breaker
+          case score_diff <. convergence_threshold {
+            True -> {
+              // Get depth-0 scores for these moves
+              let depth_0_a = case list.find(depth_0_scores, fn(pair) {
+                let #(m, _) = pair
+                m == move_a
+              }) {
+                Ok(#(_, score)) -> score
+                Error(_) -> 0.0
+              }
+              
+              let depth_0_b = case list.find(depth_0_scores, fn(pair) {
+                let #(m, _) = pair
+                m == move_b
+              }) {
+                Ok(#(_, score)) -> score
+                Error(_) -> 0.0
+              }
+              
+              // Prefer higher depth-0 score when minimax scores converge
+              case float.compare(depth_0_b, depth_0_a) {
+                order.Eq -> {
+                  // Still tied, use random tie-breaker
+                  let bias_a = get_move_bias(move_a, tie_breaker)
+                  let bias_b = get_move_bias(move_b, tie_breaker)
+                  float.compare(bias_b, bias_a)
+                }
+                other -> other
+              }
             }
-            other -> other
+            False -> {
+              // Scores divergent enough, use minimax score
+              case float.compare(score_b, with: score_a) {
+                order.Eq -> {
+                  let bias_a = get_move_bias(move_a, tie_breaker)
+                  let bias_b = get_move_bias(move_b, tie_breaker)
+                  float.compare(bias_b, bias_a)
+                }
+                other -> other
+              }
+            }
           }
         })
       {
