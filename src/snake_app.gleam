@@ -94,6 +94,11 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
       case parse_game_state(req) {
         Ok(game_state) -> {
           let request_start = log.get_monotonic_time()
+          log.info_with_fields("Move request received", [
+            #("turn", int.to_string(game_state.turn)),
+            #("num_snakes", int.to_string(list.length(game_state.board.snakes))),
+            #("num_food", int.to_string(list.length(game_state.board.food))),
+          ])
           let config = adaptive_config.get_adaptive_config(game_state)
           let safe_moves = get_safe_moves(game_state)
 

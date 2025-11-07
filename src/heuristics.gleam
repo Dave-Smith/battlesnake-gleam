@@ -5,9 +5,24 @@ import game_state.{manhattan_distance}
 import gleam/deque
 import gleam/int
 import gleam/list
+import gleam/option.{None, Some}
 import gleam/set
 import heuristic_config.{type HeuristicConfig}
 import pathfinding
+
+/// Helper: Find nearest food in O(n) instead of O(n log n) sort
+fn find_nearest_food(from: api.Coord, food: List(api.Coord)) -> Int {
+  case food {
+    [] -> 999
+    [first, ..rest] -> {
+      let initial_distance = manhattan_distance(from, first)
+      list.fold(rest, initial_distance, fn(min_dist, food_coord) {
+        let dist = manhattan_distance(from, food_coord)
+        int.min(min_dist, dist)
+      })
+    }
+  }
+}
 
 /// Aggregates all heuristic scores for a given game state
 pub fn evaluate_board(state: GameState, config: HeuristicConfig) -> Float {
@@ -37,6 +52,10 @@ pub fn evaluate_board(state: GameState, config: HeuristicConfig) -> Float {
     }),
     #("avoid_adjacent_heads", case config.enable_avoid_adjacent_heads {
       True -> avoid_adjacent_heads_score(state, config)
+      False -> 0.0
+    }),
+    #("head_collision_danger", case config.enable_head_collision_danger {
+      True -> head_collision_danger_score(state, config)
       False -> 0.0
     }),
     #("center_control", case config.enable_center_control {
@@ -102,6 +121,10 @@ pub fn evaluate_board_detailed(
     }),
     #("avoid_adjacent_heads", case config.enable_avoid_adjacent_heads {
       True -> avoid_adjacent_heads_score(state, config)
+      False -> 0.0
+    }),
+    #("head_collision_danger", case config.enable_head_collision_danger {
+      True -> head_collision_danger_score(state, config)
       False -> 0.0
     }),
     #("center_control", case config.enable_center_control {
@@ -217,7 +240,42 @@ fn avoid_adjacent_heads_score(
   })
 }
 
-/// C. Center Control - reward being in the center, penalize being near walls
+/// C. Head Collision Danger - detect and heavily penalize moving into tiles opponents could also move into
+/// This prevents head-to-head collisions where both snakes move into the same tile
+fn head_collision_danger_score(
+  state: GameState,
+  config: HeuristicConfig,
+) -> Float {
+  let our_head = state.you.head
+  let our_length = state.you.length
+  let opponent_snakes =
+    list.filter(state.board.snakes, fn(s) { s.id != state.you.id })
+
+  list.fold(opponent_snakes, 0.0, fn(acc, opponent) {
+    // Get all tiles opponent COULD move to from their CURRENT position
+    let opponent_possible_moves = [
+      api.Coord(opponent.head.x + 1, opponent.head.y),
+      api.Coord(opponent.head.x - 1, opponent.head.y),
+      api.Coord(opponent.head.x, opponent.head.y + 1),
+      api.Coord(opponent.head.x, opponent.head.y - 1),
+    ]
+
+    // Check if OUR new head position is in their danger zone
+    case list.contains(opponent_possible_moves, our_head) {
+      True -> {
+        // If we're longer, we win the collision - encourage it
+        // If we're equal or shorter, we die - heavily penalize
+        case our_length > opponent.length {
+          True -> acc +. config.weight_head_collision_danger_longer
+          False -> acc +. config.weight_head_collision_danger_equal
+        }
+      }
+      False -> acc
+    }
+  })
+}
+
+/// D. Center Control - reward being in the center, penalize being near walls
 fn center_control_score(state: GameState, config: HeuristicConfig) -> Float {
   let head = state.you.head
   let board = state.board
@@ -260,17 +318,7 @@ fn food_health_score(state: GameState, config: HeuristicConfig) -> Float {
 
   case our_health < config.health_threshold && food != [] {
     True -> {
-      let nearest_food_distance = case
-        list.sort(food, fn(a, b) {
-          int.compare(
-            manhattan_distance(our_head, a),
-            manhattan_distance(our_head, b),
-          )
-        })
-      {
-        [nearest, ..] -> manhattan_distance(our_head, nearest)
-        [] -> 999
-      }
+      let nearest_food_distance = find_nearest_food(our_head, food)
       let distance_factor =
         1.0 /. { int.to_float(nearest_food_distance) +. 1.0 }
       config.weight_food_health *. distance_factor
@@ -314,22 +362,18 @@ fn food_safety_score(state: GameState, config: HeuristicConfig) -> Float {
 
   case our_health < config.health_threshold && food != [] {
     True -> {
-      // Find closest food
-      let food_with_distance =
-        list.map(food, fn(food_coord) {
+      // Find closest food in O(n)
+      case
+        list.fold(food, #(None, 999), fn(best, food_coord) {
           let distance = manhattan_distance(our_head, food_coord)
-          #(food_coord, distance)
+          let #(_, best_dist) = best
+          case distance < best_dist {
+            True -> #(Some(food_coord), distance)
+            False -> best
+          }
         })
-
-      let sorted_food =
-        list.sort(food_with_distance, fn(a, b) {
-          let #(_, dist_a) = a
-          let #(_, dist_b) = b
-          int.compare(dist_a, dist_b)
-        })
-
-      case sorted_food {
-        [#(closest_food, distance), ..] -> {
+      {
+        #(Some(closest_food), distance) -> {
           case distance <= 10 {
             True -> {
               // Reward moves toward close food
@@ -349,7 +393,7 @@ fn food_safety_score(state: GameState, config: HeuristicConfig) -> Float {
             False -> 0.0
           }
         }
-        [] -> 0.0
+        _ -> 0.0
       }
     }
     False -> 0.0
@@ -480,17 +524,7 @@ fn competitive_length_score(state: GameState, config: HeuristicConfig) -> Float 
         diff if diff == 0 -> {
           case our_health > config.competitive_length_health_min && food != [] {
             True -> {
-              let nearest_food_distance = case
-                list.sort(food, fn(a, b) {
-                  int.compare(
-                    manhattan_distance(our_head, a),
-                    manhattan_distance(our_head, b),
-                  )
-                })
-              {
-                [nearest, ..] -> manhattan_distance(our_head, nearest)
-                [] -> 999
-              }
+              let nearest_food_distance = find_nearest_food(our_head, food)
               let distance_factor =
                 1.0 /. { int.to_float(nearest_food_distance) +. 1.0 }
               config.weight_competitive_length *. distance_factor
@@ -501,17 +535,7 @@ fn competitive_length_score(state: GameState, config: HeuristicConfig) -> Float 
         _ -> {
           case our_health > config.competitive_length_health_min && food != [] {
             True -> {
-              let nearest_food_distance = case
-                list.sort(food, fn(a, b) {
-                  int.compare(
-                    manhattan_distance(our_head, a),
-                    manhattan_distance(our_head, b),
-                  )
-                })
-              {
-                [nearest, ..] -> manhattan_distance(our_head, nearest)
-                [] -> 999
-              }
+              let nearest_food_distance = find_nearest_food(our_head, food)
               let distance_factor =
                 1.0 /. { int.to_float(nearest_food_distance) +. 1.0 }
               config.weight_competitive_length_critical *. distance_factor
