@@ -82,6 +82,17 @@ fn calculate_dynamic_depth(game_state: GameState) -> Int {
   }
 }
 
+fn get_move_time_budget_ms() -> Int {
+  case envoy.get("MOVE_TIME_BUDGET_MS") {
+    Ok(p) ->
+      case int.parse(p) {
+        Ok(parsed) -> parsed
+        Error(_) -> 250
+      }
+    Error(_) -> 250
+  }
+}
+
 fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) {
   case req.method, req.path {
     Get, "/" -> {
@@ -116,7 +127,8 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
       case parse_game_state(req) {
         Ok(game_state) -> {
           let request_start = log.get_monotonic_time()
-          let _ = system.force_gc()
+          let time_budget_ms = get_move_time_budget_ms()
+          let deadline_ms = request_start + time_budget_ms
           log.info_with_fields("Move request received", [
             #("turn", int.to_string(game_state.turn)),
             #("num_snakes", int.to_string(list.length(game_state.board.snakes))),
@@ -188,7 +200,13 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
                 #("opponent_sim_depth", int.to_string(opponent_sim_depth)),
               ])
               let result =
-                minimax.choose_move(game_state, depth, config, depth_0_scores)
+                minimax.choose_move(
+                  game_state,
+                  depth,
+                  config,
+                  depth_0_scores,
+                  deadline_ms,
+                )
 
               // DEBUG: Log final minimax scores
               let minimax_scores =
@@ -203,6 +221,7 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
                       999_999.0,
                       config,
                       opponent_sim_depth - 1,
+                      deadline_ms,
                     )
                   log.info_with_fields("Minimax score", [
                     #("move", move),

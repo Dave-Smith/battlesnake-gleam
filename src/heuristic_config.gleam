@@ -42,6 +42,18 @@ pub type HeuristicConfig {
   )
 }
 
+/// Lightweight configuration used when we are out of time in minimax.
+/// Keeps all safety-related heuristics but disables expensive spatial analysis
+/// like flood fill, voronoi territory, and tail chasing.
+pub fn cheap_config_from(config: HeuristicConfig) -> HeuristicConfig {
+  HeuristicConfig(
+    ..config,
+    enable_flood_fill: False,
+    enable_voronoi_control: False,
+    enable_tail_chasing: False,
+  )
+}
+
 /// Default configuration matching the game plan specifications
 pub fn default_config() -> HeuristicConfig {
   HeuristicConfig(
@@ -98,21 +110,17 @@ pub fn opponent_prediction_config() -> HeuristicConfig {
     weight_safety_self_collision: -1000.0,
     weight_safety_head_collision_longer: -800.0,
     weight_safety_head_collision_shorter: 50.0,
-    
     // Basic space awareness
     enable_flood_fill: True,
     weight_flood_fill: 5.0,
-    
     // Food when hungry
     enable_food_health: True,
     weight_food_health: 300.0,
     health_threshold: 40,
-    
     // Avoid colliding with us
     enable_head_collision_danger: True,
     weight_head_collision_danger_longer: 100.0,
     weight_head_collision_danger_equal: -3000.0,
-    
     // Disable expensive/complex heuristics
     enable_avoid_adjacent_heads: False,
     enable_center_control: False,
@@ -121,7 +129,6 @@ pub fn opponent_prediction_config() -> HeuristicConfig {
     enable_tail_chasing: False,
     enable_voronoi_control: False,
     enable_competitive_length: False,
-    
     // Unused weights (disabled above)
     weight_avoid_adjacent_heads: 0.0,
     weight_avoid_adjacent_heads_longer: 0.0,
@@ -172,22 +179,18 @@ pub fn early_game_config() -> HeuristicConfig {
     weight_early_game_food: 300.0,
     early_game_food_turn_threshold: 75,
     weight_food_health: 350.0,
-    
     // Length advantage is valuable
     enable_competitive_length: True,
     weight_competitive_length: 200.0,
     weight_competitive_length_critical: 350.0,
-    
     // Space is plentiful, lower priority
     weight_flood_fill: 3.0,
-    
     // Voronoi is expensive and less useful early
     enable_voronoi_control: False,
-    
     // Center control matters less early
+    enable_center_control: False,
     weight_center_control: 30.0,
     weight_center_penalty: -10.0,
-    
     // Tail chasing less important (space available)
     weight_tail_chasing: 50.0,
   )
@@ -200,28 +203,22 @@ pub fn mid_game_config() -> HeuristicConfig {
     ..default_config(),
     // Early game food disabled after turn 75
     enable_early_game_food: False,
-    
     // Only eat when necessary
     weight_food_health: 300.0,
     health_threshold: 30,
-    
     // Space control becomes more important
     weight_flood_fill: 5.0,
-    
     // Voronoi valuable for positioning
     enable_voronoi_control: True,
     weight_voronoi_control: 20.0,
-    
     // Center control critical
     enable_center_control: True,
     weight_center_control: 60.0,
     weight_center_penalty: -30.0,
-    
     // Competitive length still matters
     enable_competitive_length: True,
     weight_competitive_length: 150.0,
     weight_competitive_length_critical: 250.0,
-    
     // Tail chasing for positioning
     weight_tail_chasing: 80.0,
   )
@@ -234,28 +231,22 @@ pub fn late_game_config() -> HeuristicConfig {
     ..default_config(),
     // No more early game food
     enable_early_game_food: False,
-    
     // Food only when desperate
     weight_food_health: 400.0,
     health_threshold: 25,
-    
     // CRITICAL: Don't get trapped
     weight_flood_fill: 8.0,
-    
     // Tail chasing to create escape routes
     weight_tail_chasing: 120.0,
     tail_chasing_health_threshold: 60,
     tail_chasing_space_threshold: 40,
-    
     // Center control very important
     enable_center_control: True,
     weight_center_control: 80.0,
     weight_center_penalty: -40.0,
-    
     // Voronoi for territory control in endgame
     enable_voronoi_control: True,
     weight_voronoi_control: 25.0,
-    
     // Length less important (staying alive is key)
     enable_competitive_length: False,
   )

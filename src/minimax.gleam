@@ -9,7 +9,7 @@ import gleam/int
 import gleam/list
 import gleam/order
 import gleam/string
-import heuristic_config.{type HeuristicConfig}
+import heuristic_config.{type HeuristicConfig, cheap_config_from}
 import heuristics
 import log
 import opponent_ai
@@ -26,6 +26,7 @@ pub fn choose_move(
   depth: Int,
   config: HeuristicConfig,
   depth_0_scores: List(#(String, Float)),
+  deadline_ms: Int,
 ) -> MinimaxResult {
   let start_time = log.get_monotonic_time()
   let safe_moves = get_safe_moves(state)
@@ -72,6 +73,7 @@ pub fn choose_move(
               999_999.0,
               config,
               opponent_sim_depth - 1,
+              deadline_ms,
             )
           #(move, score)
         })
@@ -204,7 +206,7 @@ fn get_move_bias(move: String, tie_breaker: Int) -> Float {
 }
 
 /// Core recursive Minimax function with alpha-beta pruning
-/// Now includes opponent simulation for first 3 plies
+/// Now includes opponent simulation and a deadline-based cutoff.
 pub fn minimax(
   state: GameState,
   depth: Int,
@@ -213,41 +215,49 @@ pub fn minimax(
   beta: Float,
   config: HeuristicConfig,
   opponent_sim_depth: Int,
+  deadline_ms: Int,
 ) -> Float {
-  case depth == 0 {
-    True -> heuristics.evaluate_board(state, config)
-    False -> {
-      let safe_moves = get_safe_moves(state)
+  let now = log.get_monotonic_time()
+  case now >= deadline_ms {
+    True -> heuristics.evaluate_board(state, cheap_config_from(config))
+    False ->
+      case depth == 0 {
+        True -> heuristics.evaluate_board(state, config)
+        False -> {
+          let safe_moves = get_safe_moves(state)
 
-      case safe_moves {
-        [] -> heuristics.evaluate_board(state, config)
-        moves ->
-          case is_maximizing {
-            True ->
-              maximize_score(
-                state,
-                moves,
-                depth,
-                alpha,
-                beta,
-                config,
-                alpha,
-                opponent_sim_depth,
-              )
-            False ->
-              minimize_score(
-                state,
-                moves,
-                depth,
-                alpha,
-                beta,
-                config,
-                beta,
-                opponent_sim_depth,
-              )
+          case safe_moves {
+            [] -> heuristics.evaluate_board(state, config)
+            moves ->
+              case is_maximizing {
+                True ->
+                  maximize_score(
+                    state,
+                    moves,
+                    depth,
+                    alpha,
+                    beta,
+                    config,
+                    -999_999.0,
+                    opponent_sim_depth,
+                    deadline_ms,
+                  )
+                False ->
+                  minimize_score(
+                    state,
+                    moves,
+                    depth,
+                    alpha,
+                    beta,
+                    config,
+                    999_999.0,
+                    opponent_sim_depth,
+                    deadline_ms,
+                  )
+              }
           }
+        }
       }
-    }
   }
 }
 
@@ -260,68 +270,95 @@ fn maximize_score(
   config: HeuristicConfig,
   current_max: Float,
   opponent_sim_depth: Int,
+  deadline_ms: Int,
 ) -> Float {
-  case moves {
-    [] -> current_max
-    [move, ..rest] -> {
-      // Simulate opponent if within simulation depth threshold
-      let score = case opponent_sim_depth > 0 {
-        True -> {
-          // Find and predict nearest opponent's move
-          let opponents =
-            list.filter(state.board.snakes, fn(s) { s.id != state.you.id })
+  let now = log.get_monotonic_time()
+  case now >= deadline_ms {
+    True -> current_max
+    False ->
+      case moves {
+        [] -> current_max
+        [move, ..rest] -> {
+          // Simulate opponent if within simulation depth threshold
+          let score =
+            case opponent_sim_depth > 0 {
+              True -> {
+                // Find and predict nearest opponent's move
+                let opponents =
+                  list.filter(state.board.snakes, fn(s) { s.id != state.you.id })
 
-          case opponent_ai.find_nearest_opponent(state.you.head, opponents) {
-            Ok(nearest_opponent) -> {
-              // Predict opponent's best move
-              let opponent_moves =
-                get_safe_moves(api.GameState(..state, you: nearest_opponent))
+                case opponent_ai.find_nearest_opponent(state.you.head, opponents) {
+                  Ok(nearest_opponent) -> {
+                    // Predict opponent's best move
+                    let opponent_moves =
+                      get_safe_moves(api.GameState(..state, you: nearest_opponent))
 
-              // Branch on opponent moves (minimizing for opponent)
-              branch_on_opponent_moves(
+                    // Branch on opponent moves (minimizing for opponent)
+                    branch_on_opponent_moves(
+                      state,
+                      move,
+                      nearest_opponent,
+                      opponent_moves,
+                      depth,
+                      alpha,
+                      beta,
+                      config,
+                      opponent_sim_depth,
+                      deadline_ms,
+                    )
+                  }
+                  Error(_) -> {
+                    // No opponents, use regular simulation
+                    let next_state = simulate_game_state(state, move)
+                    minimax(
+                      next_state,
+                      depth - 1,
+                      False,
+                      alpha,
+                      beta,
+                      config,
+                      0,
+                      deadline_ms,
+                    )
+                  }
+                }
+              }
+              False -> {
+                // No opponent simulation, use regular frozen opponent
+                let next_state = simulate_game_state(state, move)
+                minimax(
+                  next_state,
+                  depth - 1,
+                  False,
+                  alpha,
+                  beta,
+                  config,
+                  0,
+                  deadline_ms,
+                )
+              }
+            }
+
+          let new_max = float.max(current_max, score)
+          let new_alpha = float.max(alpha, new_max)
+
+          case float.compare(new_alpha, with: beta) {
+            order.Gt | order.Eq -> new_max
+            order.Lt ->
+              maximize_score(
                 state,
-                move,
-                nearest_opponent,
-                opponent_moves,
+                rest,
                 depth,
-                alpha,
+                new_alpha,
                 beta,
                 config,
+                new_max,
                 opponent_sim_depth,
+                deadline_ms,
               )
-            }
-            Error(_) -> {
-              // No opponents, use regular simulation
-              let next_state = simulate_game_state(state, move)
-              minimax(next_state, depth - 1, False, alpha, beta, config, 0)
-            }
           }
         }
-        False -> {
-          // No opponent simulation, use regular frozen opponent
-          let next_state = simulate_game_state(state, move)
-          minimax(next_state, depth - 1, False, alpha, beta, config, 0)
-        }
       }
-
-      let new_max = float.max(current_max, score)
-      let new_alpha = float.max(alpha, new_max)
-
-      case float.compare(new_alpha, with: beta) {
-        order.Gt | order.Eq -> new_max
-        order.Lt ->
-          maximize_score(
-            state,
-            rest,
-            depth,
-            new_alpha,
-            beta,
-            config,
-            new_max,
-            opponent_sim_depth,
-          )
-      }
-    }
   }
 }
 
@@ -336,19 +373,16 @@ fn branch_on_opponent_moves(
   beta: Float,
   config: HeuristicConfig,
   opponent_sim_depth: Int,
+  deadline_ms: Int,
 ) -> Float {
-  case opponent_moves {
-    [] -> {
-      // Opponent has no safe moves, use regular simulation
-      let next_state = simulate_game_state(state, our_move)
-      minimax(next_state, depth - 1, False, alpha, beta, config, 0)
-    }
-    moves -> {
-      // Evaluate all opponent moves, take the worst for us (minimizing)
-      list.fold(moves, 999_999.0, fn(min_score, opp_move) {
-        let next_state =
-          simulate_game_state_with_opponent(state, our_move, opponent, opp_move)
-        let score =
+  let now = log.get_monotonic_time()
+  case now >= deadline_ms {
+    True -> heuristics.evaluate_board(state, cheap_config_from(config))
+    False ->
+      case opponent_moves {
+        [] -> {
+          // Opponent has no safe moves, use regular simulation
+          let next_state = simulate_game_state(state, our_move)
           minimax(
             next_state,
             depth - 1,
@@ -356,11 +390,30 @@ fn branch_on_opponent_moves(
             alpha,
             beta,
             config,
-            opponent_sim_depth - 1,
+            0,
+            deadline_ms,
           )
-        float.min(min_score, score)
-      })
-    }
+        }
+        moves -> {
+          // Evaluate all opponent moves, take the worst for us (minimizing)
+          list.fold(moves, 999_999.0, fn(min_score, opp_move) {
+            let next_state =
+              simulate_game_state_with_opponent(state, our_move, opponent, opp_move)
+            let score =
+              minimax(
+                next_state,
+                depth - 1,
+                False,
+                alpha,
+                beta,
+                config,
+                opponent_sim_depth - 1,
+                deadline_ms,
+              )
+            float.min(min_score, score)
+          })
+        }
+      }
   }
 }
 
@@ -373,38 +426,46 @@ fn minimize_score(
   config: HeuristicConfig,
   current_min: Float,
   opponent_sim_depth: Int,
+  deadline_ms: Int,
 ) -> Float {
-  case moves {
-    [] -> current_min
-    [move, ..rest] -> {
-      let next_state = simulate_game_state(state, move)
-      let score =
-        minimax(
-          next_state,
-          depth - 1,
-          True,
-          alpha,
-          beta,
-          config,
-          opponent_sim_depth,
-        )
-      let new_min = float.min(current_min, score)
-      let new_beta = float.min(beta, new_min)
+  let now = log.get_monotonic_time()
+  case now >= deadline_ms {
+    True -> current_min
+    False ->
+      case moves {
+        [] -> current_min
+        [move, ..rest] -> {
+          let next_state = simulate_game_state(state, move)
+          let score =
+            minimax(
+              next_state,
+              depth - 1,
+              True,
+              alpha,
+              beta,
+              config,
+              opponent_sim_depth,
+              deadline_ms,
+            )
+          let new_min = float.min(current_min, score)
+          let new_beta = float.min(beta, new_min)
 
-      case float.compare(new_beta, with: alpha) {
-        order.Lt -> new_min
-        order.Gt | order.Eq ->
-          minimize_score(
-            state,
-            rest,
-            depth,
-            alpha,
-            new_beta,
-            config,
-            new_min,
-            opponent_sim_depth,
-          )
+          case float.compare(new_beta, with: alpha) {
+            order.Lt -> new_min
+            order.Gt | order.Eq ->
+              minimize_score(
+                state,
+                rest,
+                depth,
+                alpha,
+                new_beta,
+                config,
+                new_min,
+                opponent_sim_depth,
+                deadline_ms,
+              )
+          }
+        }
       }
-    }
   }
 }
