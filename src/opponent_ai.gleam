@@ -4,9 +4,7 @@
 import api.{type Coord, type GameState, type Snake}
 import game_state.{get_safe_moves, manhattan_distance, simulate_game_state}
 import gleam/float
-import gleam/int
 import gleam/list
-import gleam/order
 import heuristic_config
 import heuristics
 

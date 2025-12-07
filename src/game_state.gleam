@@ -161,3 +161,38 @@ pub fn simulate_game_state(
     you: updated_our_snake,
   )
 }
+
+/// Simulates a game state with BOTH our move and a specific opponent's move
+/// Used for opponent prediction in minimax
+pub fn simulate_game_state_with_opponent(
+  current_state: GameState,
+  our_move: String,
+  opponent: Snake,
+  opponent_move: String,
+) -> GameState {
+  let our_snake = current_state.you
+  let updated_our_snake = simulate_move(our_snake, our_move)
+  let updated_opponent = simulate_move(opponent, opponent_move)
+
+  let updated_other_snakes =
+    list.map(current_state.board.snakes, fn(s) {
+      case s.id == updated_our_snake.id {
+        True -> updated_our_snake
+        False ->
+          case s.id == opponent.id {
+            True -> updated_opponent
+            False -> api.Snake(..s, health: s.health - 1)
+          }
+      }
+    })
+
+  let updated_board =
+    api.Board(..current_state.board, snakes: updated_other_snakes)
+
+  api.GameState(
+    ..current_state,
+    turn: current_state.turn + 1,
+    board: updated_board,
+    you: updated_our_snake,
+  )
+}

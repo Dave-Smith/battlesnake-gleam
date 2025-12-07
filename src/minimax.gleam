@@ -1,7 +1,9 @@
 //// Minimax Algorithm with Alpha-Beta Pruning
 
-import api.{type GameState}
-import game_state.{get_safe_moves, simulate_game_state}
+import api.{type GameState, type Snake}
+import game_state.{
+  get_safe_moves, simulate_game_state, simulate_game_state_with_opponent,
+}
 import gleam/float
 import gleam/int
 import gleam/list
@@ -10,6 +12,7 @@ import gleam/string
 import heuristic_config.{type HeuristicConfig}
 import heuristics
 import log
+import opponent_ai
 import pathfinding
 
 pub type MinimaxResult {
@@ -54,16 +57,27 @@ pub fn choose_move(
         filtered -> filtered
       }
 
+      // Determine opponent simulation depth (2 plies max for performance)
+      let opponent_sim_depth = int.min(depth, 2)
+
       let move_scores =
         list.map(evaluated_moves, fn(move) {
           let next_state = simulate_game_state(state, move)
           let score =
-            minimax(next_state, depth - 1, False, -999_999.0, 999_999.0, config)
+            minimax(
+              next_state,
+              depth - 1,
+              False,
+              -999_999.0,
+              999_999.0,
+              config,
+              opponent_sim_depth - 1,
+            )
           #(move, score)
         })
 
       let tie_breaker = calculate_tie_breaker(state.you.id, state.turn)
-      
+
       // Threshold for considering scores "close enough" to use depth-0 tie-breaker
       let convergence_threshold = 50.0
 
@@ -71,29 +85,33 @@ pub fn choose_move(
         list.sort(move_scores, fn(a, b) {
           let #(move_a, score_a) = a
           let #(move_b, score_b) = b
-          
+
           let score_diff = float.absolute_value(score_a -. score_b)
-          
+
           // If scores are very close, use depth-0 score as tie-breaker
           case score_diff <. convergence_threshold {
             True -> {
               // Get depth-0 scores for these moves
-              let depth_0_a = case list.find(depth_0_scores, fn(pair) {
-                let #(m, _) = pair
-                m == move_a
-              }) {
+              let depth_0_a = case
+                list.find(depth_0_scores, fn(pair) {
+                  let #(m, _) = pair
+                  m == move_a
+                })
+              {
                 Ok(#(_, score)) -> score
                 Error(_) -> 0.0
               }
-              
-              let depth_0_b = case list.find(depth_0_scores, fn(pair) {
-                let #(m, _) = pair
-                m == move_b
-              }) {
+
+              let depth_0_b = case
+                list.find(depth_0_scores, fn(pair) {
+                  let #(m, _) = pair
+                  m == move_b
+                })
+              {
                 Ok(#(_, score)) -> score
                 Error(_) -> 0.0
               }
-              
+
               // Prefer higher depth-0 score when minimax scores converge
               case float.compare(depth_0_b, depth_0_a) {
                 order.Eq -> {
@@ -186,6 +204,7 @@ fn get_move_bias(move: String, tie_breaker: Int) -> Float {
 }
 
 /// Core recursive Minimax function with alpha-beta pruning
+/// Now includes opponent simulation for first 3 plies
 pub fn minimax(
   state: GameState,
   depth: Int,
@@ -193,6 +212,7 @@ pub fn minimax(
   alpha: Float,
   beta: Float,
   config: HeuristicConfig,
+  opponent_sim_depth: Int,
 ) -> Float {
   case depth == 0 {
     True -> heuristics.evaluate_board(state, config)
@@ -204,9 +224,27 @@ pub fn minimax(
         moves ->
           case is_maximizing {
             True ->
-              maximize_score(state, moves, depth, alpha, beta, config, alpha)
+              maximize_score(
+                state,
+                moves,
+                depth,
+                alpha,
+                beta,
+                config,
+                alpha,
+                opponent_sim_depth,
+              )
             False ->
-              minimize_score(state, moves, depth, alpha, beta, config, beta)
+              minimize_score(
+                state,
+                moves,
+                depth,
+                alpha,
+                beta,
+                config,
+                beta,
+                opponent_sim_depth,
+              )
           }
       }
     }
@@ -221,20 +259,107 @@ fn maximize_score(
   beta: Float,
   config: HeuristicConfig,
   current_max: Float,
+  opponent_sim_depth: Int,
 ) -> Float {
   case moves {
     [] -> current_max
     [move, ..rest] -> {
-      let next_state = simulate_game_state(state, move)
-      let score = minimax(next_state, depth - 1, False, alpha, beta, config)
+      // Simulate opponent if within simulation depth threshold
+      let score = case opponent_sim_depth > 0 {
+        True -> {
+          // Find and predict nearest opponent's move
+          let opponents =
+            list.filter(state.board.snakes, fn(s) { s.id != state.you.id })
+
+          case opponent_ai.find_nearest_opponent(state.you.head, opponents) {
+            Ok(nearest_opponent) -> {
+              // Predict opponent's best move
+              let opponent_moves =
+                get_safe_moves(api.GameState(..state, you: nearest_opponent))
+
+              // Branch on opponent moves (minimizing for opponent)
+              branch_on_opponent_moves(
+                state,
+                move,
+                nearest_opponent,
+                opponent_moves,
+                depth,
+                alpha,
+                beta,
+                config,
+                opponent_sim_depth,
+              )
+            }
+            Error(_) -> {
+              // No opponents, use regular simulation
+              let next_state = simulate_game_state(state, move)
+              minimax(next_state, depth - 1, False, alpha, beta, config, 0)
+            }
+          }
+        }
+        False -> {
+          // No opponent simulation, use regular frozen opponent
+          let next_state = simulate_game_state(state, move)
+          minimax(next_state, depth - 1, False, alpha, beta, config, 0)
+        }
+      }
+
       let new_max = float.max(current_max, score)
       let new_alpha = float.max(alpha, new_max)
 
       case float.compare(new_alpha, with: beta) {
         order.Gt | order.Eq -> new_max
         order.Lt ->
-          maximize_score(state, rest, depth, new_alpha, beta, config, new_max)
+          maximize_score(
+            state,
+            rest,
+            depth,
+            new_alpha,
+            beta,
+            config,
+            new_max,
+            opponent_sim_depth,
+          )
       }
+    }
+  }
+}
+
+/// Branch on opponent's possible moves, taking worst case for us (opponent minimizes our score)
+fn branch_on_opponent_moves(
+  state: GameState,
+  our_move: String,
+  opponent: Snake,
+  opponent_moves: List(String),
+  depth: Int,
+  alpha: Float,
+  beta: Float,
+  config: HeuristicConfig,
+  opponent_sim_depth: Int,
+) -> Float {
+  case opponent_moves {
+    [] -> {
+      // Opponent has no safe moves, use regular simulation
+      let next_state = simulate_game_state(state, our_move)
+      minimax(next_state, depth - 1, False, alpha, beta, config, 0)
+    }
+    moves -> {
+      // Evaluate all opponent moves, take the worst for us (minimizing)
+      list.fold(moves, 999_999.0, fn(min_score, opp_move) {
+        let next_state =
+          simulate_game_state_with_opponent(state, our_move, opponent, opp_move)
+        let score =
+          minimax(
+            next_state,
+            depth - 1,
+            False,
+            alpha,
+            beta,
+            config,
+            opponent_sim_depth - 1,
+          )
+        float.min(min_score, score)
+      })
     }
   }
 }
@@ -247,19 +372,38 @@ fn minimize_score(
   beta: Float,
   config: HeuristicConfig,
   current_min: Float,
+  opponent_sim_depth: Int,
 ) -> Float {
   case moves {
     [] -> current_min
     [move, ..rest] -> {
       let next_state = simulate_game_state(state, move)
-      let score = minimax(next_state, depth - 1, True, alpha, beta, config)
+      let score =
+        minimax(
+          next_state,
+          depth - 1,
+          True,
+          alpha,
+          beta,
+          config,
+          opponent_sim_depth,
+        )
       let new_min = float.min(current_min, score)
       let new_beta = float.min(beta, new_min)
 
       case float.compare(new_beta, with: alpha) {
         order.Lt -> new_min
         order.Gt | order.Eq ->
-          minimize_score(state, rest, depth, alpha, new_beta, config, new_min)
+          minimize_score(
+            state,
+            rest,
+            depth,
+            alpha,
+            new_beta,
+            config,
+            new_min,
+            opponent_sim_depth,
+          )
       }
     }
   }

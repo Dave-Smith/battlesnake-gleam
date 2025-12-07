@@ -2,7 +2,6 @@
 //// Dynamically adjusts heuristic weights based on game phase and opponent behavior
 
 import api.{type GameState}
-import gleam/float
 import gleam/int
 import gleam/list
 import heuristic_config.{type HeuristicConfig}
@@ -10,9 +9,12 @@ import log
 
 /// Represents the current phase of the game
 pub type GamePhase {
-  EarlyGame  // Turns 1-75, focus on growth and survival
-  MidGame    // Turns 76+, 2+ opponents, focus on positioning
-  LateGame   // 1-2 opponents or cramped space, focus on survival
+  EarlyGame
+  // Turns 1-75, focus on growth and survival
+  MidGame
+  // Turns 76+, 2+ opponents, focus on positioning
+  LateGame
+  // 1-2 opponents or cramped space, focus on survival
 }
 
 /// Detects the current game phase based on turn number and opponent count

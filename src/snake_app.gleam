@@ -3,6 +3,7 @@ import api.{
   type GameState, game_state_from_json, index_response_to_json,
   move_response_to_json,
 }
+import envoy
 import game_state.{get_safe_moves, simulate_game_state}
 import gleam/bit_array
 import gleam/bytes_tree
@@ -12,6 +13,7 @@ import gleam/http.{Get, Post}
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/int
+import gleam/io
 import gleam/json
 import gleam/list
 import gleam/option.{Some}
@@ -68,13 +70,14 @@ fn calculate_dynamic_depth(game_state: GameState) -> Int {
     list.fold(game_state.board.snakes, 0, fn(acc, snake) { acc + snake.length })
   let board_density = num_occupied * 100 / board_size
 
+  // Reduced depths for opponent simulation performance
   case num_snakes {
-    1 -> 10
-    2 -> 8
+    1 -> 7
+    2 -> 6
     _ ->
       case board_density > 40 {
-        True -> 5
-        False -> 6
+        True -> 4
+        False -> 5
       }
   }
 }
@@ -153,12 +156,13 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
                 Ok(prediction) -> {
                   log.info_with_fields("Opponent prediction", [
                     #("opponent_id", prediction.opponent.id),
-                    #("distance", int.to_string(
-                      game_state.manhattan_distance(
+                    #(
+                      "distance",
+                      int.to_string(game_state.manhattan_distance(
                         game_state.you.head,
                         prediction.opponent.head,
-                      ),
-                    )),
+                      )),
+                    ),
                     #("predicted_move", prediction.predicted_move),
                     #("score", float_to_string(prediction.score)),
                   ])
@@ -178,8 +182,10 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
               })
 
               // Run minimax with depth-0 scores for tie-breaking
+              let opponent_sim_depth = int.min(depth, 3)
               log.info_with_fields("=== MINIMAX EVALUATION ===", [
                 #("depth", int.to_string(depth)),
+                #("opponent_sim_depth", int.to_string(opponent_sim_depth)),
               ])
               let result =
                 minimax.choose_move(game_state, depth, config, depth_0_scores)
@@ -196,6 +202,7 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
                       -999_999.0,
                       999_999.0,
                       config,
+                      opponent_sim_depth - 1,
                     )
                   log.info_with_fields("Minimax score", [
                     #("move", move),
@@ -259,11 +266,20 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
 }
 
 pub fn main() {
+  let port = case envoy.get("PORT") {
+    Ok(p) -> {
+      case int.parse(p) {
+        Ok(parsed_port) -> parsed_port
+        Error(_) -> 8080
+      }
+    }
+    Error(_) -> 8080
+  }
   let assert Ok(_) =
     mist.new(handle_request)
-    |> mist.port(8080)
+    |> mist.port(port)
     |> mist.start
 
-  log.info("Battlesnake server started on port 8080")
+  log.info("Battlesnake server started on port " <> int.to_string(port))
   process.sleep_forever()
 }
