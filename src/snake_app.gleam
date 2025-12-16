@@ -13,16 +13,15 @@ import gleam/http.{Get, Post}
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/int
-import gleam/io
 import gleam/json
 import gleam/list
-import gleam/option.{Some}
+import gleam/option.{None, Some}
 import heuristics
 import log
 import minimax
 import mist
+import move_time_budget
 import opponent_ai
-import system
 
 fn json_response(body: String) -> Response(mist.ResponseData) {
   response.new(200)
@@ -82,14 +81,16 @@ fn calculate_dynamic_depth(game_state: GameState) -> Int {
   }
 }
 
-fn get_move_time_budget_ms() -> Int {
+fn get_move_time_budget_ms_fallback() -> Int {
+  // Legacy escape hatch for local dev. This is only used if we have no
+  // per-game budget stored and no timeout in the request.
   case envoy.get("MOVE_TIME_BUDGET_MS") {
     Ok(p) ->
       case int.parse(p) {
         Ok(parsed) -> parsed
-        Error(_) -> 250
+        Error(_) -> move_time_budget.compute_budget_ms(500)
       }
-    Error(_) -> 250
+    Error(_) -> move_time_budget.compute_budget_ms(500)
   }
 }
 
@@ -111,8 +112,16 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
     Post, "/start" -> {
       case parse_game_state(req) {
         Ok(game_state) -> {
+          let budget_ms =
+            move_time_budget.set_for_game(
+              game_state.game.id,
+              game_state.game.timeout_ms,
+            )
+
           log.info_with_fields("Game started", [
             #("game_id", game_state.game.id),
+            #("timeout_ms", int.to_string(game_state.game.timeout_ms)),
+            #("move_time_budget_ms", int.to_string(budget_ms)),
           ])
           empty_response()
         }
@@ -127,12 +136,33 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
       case parse_game_state(req) {
         Ok(game_state) -> {
           let request_start = log.get_monotonic_time()
-          let time_budget_ms = get_move_time_budget_ms()
+
+          let time_budget_ms = case
+            move_time_budget.lookup_budget_ms(game_state.game.id)
+          {
+            Some(ms) -> ms
+            None -> {
+              // If /start wasn't called (or we restarted), derive it from the request.
+              // The timeout is decoded with a default of 500ms.
+              let derived =
+                move_time_budget.set_for_game(
+                  game_state.game.id,
+                  game_state.game.timeout_ms,
+                )
+              case derived > 0 {
+                True -> derived
+                False -> get_move_time_budget_ms_fallback()
+              }
+            }
+          }
+
           let deadline_ms = request_start + time_budget_ms
           log.info_with_fields("Move request received", [
             #("turn", int.to_string(game_state.turn)),
             #("num_snakes", int.to_string(list.length(game_state.board.snakes))),
             #("num_food", int.to_string(list.length(game_state.board.food))),
+            #("timeout_ms", int.to_string(game_state.game.timeout_ms)),
+            #("move_time_budget_ms", int.to_string(time_budget_ms)),
           ])
           let config = adaptive_config.get_adaptive_config(game_state)
           let safe_moves = get_safe_moves(game_state)
@@ -208,28 +238,6 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
                   deadline_ms,
                 )
 
-              // DEBUG: Log final minimax scores
-              let minimax_scores =
-                list.map(safe_moves, fn(move) {
-                  let next_state = simulate_game_state(game_state, move)
-                  let score =
-                    minimax.minimax(
-                      next_state,
-                      depth - 1,
-                      False,
-                      -999_999.0,
-                      999_999.0,
-                      config,
-                      opponent_sim_depth - 1,
-                      deadline_ms,
-                    )
-                  log.info_with_fields("Minimax score", [
-                    #("move", move),
-                    #("score", float_to_string(score)),
-                  ])
-                  #(move, score)
-                })
-
               log.info_with_fields("=== FINAL DECISION ===", [
                 #("chosen_move", result.move),
                 #("chosen_score", float_to_string(result.score)),
@@ -265,6 +273,7 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
     Post, "/end" -> {
       case parse_game_state(req) {
         Ok(game_state) -> {
+          move_time_budget.clear_for_game(game_state.game.id)
           log.info_with_fields("Game ended", [
             #("game_id", game_state.game.id),
           ])

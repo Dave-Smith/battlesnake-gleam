@@ -168,18 +168,20 @@ pub fn move_response_from_json(
 }
 
 pub type Game {
-  Game(id: String)
+  Game(id: String, timeout_ms: Int)
 }
 
 pub fn game_to_json(game: Game) -> json.Json {
   json.object([
     #("id", json.string(game.id)),
+    #("timeout", json.int(game.timeout_ms)),
   ])
 }
 
 fn game_decoder() -> decode.Decoder(Game) {
   use id <- decode.field("id", decode.string)
-  decode.success(Game(id))
+  use timeout_ms <- decode.optional_field("timeout", 500, decode.int)
+  decode.success(Game(id, timeout_ms))
 }
 
 pub fn game_from_json(json_string: String) -> Result(Game, json.DecodeError) {
