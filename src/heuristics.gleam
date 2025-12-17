@@ -369,8 +369,14 @@ fn tail_chasing_score(state: GameState, config: HeuristicConfig) -> Float {
     Error(_) -> our_head
   }
 
+  let min_space = state.you.length + 2
   let accessible_tiles =
-    pathfinding.flood_fill(our_head, state.board, state.board.snakes)
+    pathfinding.flood_fill_capped(
+      our_head,
+      state.board,
+      state.board.snakes,
+      min_space,
+    )
 
   case
     our_health > config.tail_chasing_health_threshold

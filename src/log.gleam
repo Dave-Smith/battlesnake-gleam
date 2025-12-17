@@ -13,7 +13,7 @@ pub type LogLevel {
   Error
 }
 
-pub const enable_debug: Bool = True
+pub const enable_debug: Bool = False
 
 fn level_to_string(level: LogLevel) -> String {
   case level {

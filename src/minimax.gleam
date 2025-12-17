@@ -41,10 +41,11 @@ pub fn choose_move(
         list.filter_map(moves, fn(move) {
           let next_state = simulate_game_state(state, move)
           let space_available =
-            pathfinding.flood_fill(
+            pathfinding.flood_fill_capped(
               next_state.you.head,
               next_state.board,
               next_state.board.snakes,
+              min_space + 1,
             )
           case space_available >= min_space {
             True -> Ok(move)
@@ -280,64 +281,67 @@ fn maximize_score(
         [] -> current_max
         [move, ..rest] -> {
           // Simulate opponent if within simulation depth threshold
-          let score =
-            case opponent_sim_depth > 0 {
-              True -> {
-                // Find and predict nearest opponent's move
-                let opponents =
-                  list.filter(state.board.snakes, fn(s) { s.id != state.you.id })
+          let score = case opponent_sim_depth > 0 {
+            True -> {
+              // Find and predict nearest opponent's move
+              let opponents =
+                list.filter(state.board.snakes, fn(s) { s.id != state.you.id })
 
-                case opponent_ai.find_nearest_opponent(state.you.head, opponents) {
-                  Ok(nearest_opponent) -> {
-                    // Predict opponent's best move
-                    let opponent_moves =
-                      get_safe_moves(api.GameState(..state, you: nearest_opponent))
+              case
+                opponent_ai.find_nearest_opponent(state.you.head, opponents)
+              {
+                Ok(nearest_opponent) -> {
+                  // Predict opponent's best move
+                  let opponent_moves =
+                    get_safe_moves(
+                      api.GameState(..state, you: nearest_opponent),
+                    )
 
-                    // Branch on opponent moves (minimizing for opponent)
-                    branch_on_opponent_moves(
-                      state,
-                      move,
-                      nearest_opponent,
-                      opponent_moves,
-                      depth,
-                      alpha,
-                      beta,
-                      config,
-                      opponent_sim_depth,
-                      deadline_ms,
-                    )
-                  }
-                  Error(_) -> {
-                    // No opponents, use regular simulation
-                    let next_state = simulate_game_state(state, move)
-                    minimax(
-                      next_state,
-                      depth - 1,
-                      False,
-                      alpha,
-                      beta,
-                      config,
-                      0,
-                      deadline_ms,
-                    )
-                  }
+                  // Branch on opponent moves (minimizing for opponent)
+                  branch_on_opponent_moves(
+                    state,
+                    move,
+                    nearest_opponent,
+                    opponent_moves,
+                    depth,
+                    alpha,
+                    beta,
+                    config,
+                    opponent_sim_depth,
+                    deadline_ms,
+                  )
+                }
+                Error(_) -> {
+                  // No opponents, use regular simulation
+                  let next_state = simulate_game_state(state, move)
+                  minimax(
+                    next_state,
+                    depth - 1,
+                    False,
+                    alpha,
+                    beta,
+                    config,
+                    0,
+                    deadline_ms,
+                  )
                 }
               }
-              False -> {
-                // No opponent simulation, use regular frozen opponent
-                let next_state = simulate_game_state(state, move)
-                minimax(
-                  next_state,
-                  depth - 1,
-                  False,
-                  alpha,
-                  beta,
-                  config,
-                  0,
-                  deadline_ms,
-                )
-              }
             }
+            False -> {
+              // No opponent simulation, use regular frozen opponent
+              let next_state = simulate_game_state(state, move)
+              minimax(
+                next_state,
+                depth - 1,
+                False,
+                alpha,
+                beta,
+                config,
+                0,
+                deadline_ms,
+              )
+            }
+          }
 
           let new_max = float.max(current_max, score)
           let new_alpha = float.max(alpha, new_max)
@@ -398,7 +402,12 @@ fn branch_on_opponent_moves(
           // Evaluate all opponent moves, take the worst for us (minimizing)
           list.fold(moves, 999_999.0, fn(min_score, opp_move) {
             let next_state =
-              simulate_game_state_with_opponent(state, our_move, opponent, opp_move)
+              simulate_game_state_with_opponent(
+                state,
+                our_move,
+                opponent,
+                opp_move,
+              )
             let score =
               minimax(
                 next_state,

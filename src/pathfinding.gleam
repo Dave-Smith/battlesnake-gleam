@@ -17,6 +17,24 @@ pub fn flood_fill(start: Coord, board: Board, snakes: List(Snake)) -> Int {
   )
 }
 
+/// Flood fill variant that stops once `cap` reachable tiles have been found.
+/// This is useful when we only care about whether space is "large enough" and
+/// want to avoid exploring the entire reachable region.
+pub fn flood_fill_capped(
+  start: Coord,
+  board: Board,
+  snakes: List(Snake),
+  cap: Int,
+) -> Int {
+  flood_fill_capped_helper(
+    deque.from_list([start]),
+    set.from_list([start]),
+    board,
+    snakes,
+    cap,
+  )
+}
+
 fn flood_fill_helper(
   q: deque.Deque(Coord),
   visited: Set(Coord),
@@ -33,6 +51,36 @@ fn flood_fill_helper(
         list.fold(neighbors, rest, fn(acc, item) { deque.push_back(acc, item) })
       flood_fill_helper(new_queue, new_visited, board, snakes)
     }
+  }
+}
+
+fn flood_fill_capped_helper(
+  q: deque.Deque(Coord),
+  visited: Set(Coord),
+  board: Board,
+  snakes: List(Snake),
+  cap: Int,
+) -> Int {
+  // Early exit if we've already reached or exceeded the cap.
+  let size = set.size(visited)
+  case size >= cap {
+    True -> cap
+    False ->
+      case deque.pop_front(q) {
+        Error(Nil) -> size
+        Ok(#(current, rest)) -> {
+          let neighbors = get_valid_neighbors(current, board, snakes, visited)
+          let new_visited =
+            list.fold(neighbors, visited, fn(acc, coord) {
+              set.insert(acc, coord)
+            })
+          let new_queue =
+            list.fold(neighbors, rest, fn(acc, item) {
+              deque.push_back(acc, item)
+            })
+          flood_fill_capped_helper(new_queue, new_visited, board, snakes, cap)
+        }
+      }
   }
 }
 

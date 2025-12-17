@@ -101,9 +101,9 @@ fn handle_request(req: Request(mist.Connection)) -> Response(mist.ResponseData) 
         api.IndexResponse(
           apiversion: "1",
           author: "gleam-in-the-simulation",
-          color: "#ffffff",
-          head: "crystal-power",
-          tail: "crystal-power",
+          color: "##ffaff3",
+          head: "rbc-bowler",
+          tail: "rbc-necktie",
           version: "0.0.1",
         )
       json_response(json.to_string(index_response_to_json(response_data)))
